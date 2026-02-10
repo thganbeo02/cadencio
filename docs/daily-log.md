@@ -30,6 +30,7 @@
 - ✅ Consolidated obligations into a single card with updated priority colors
 - ✅ Fixed toggle switch alignment and quest meta spacing
 - ✅ Renamed spec and onboarding docs to Cadencio filenames
+- ✅ Swapped quest emojis for themed SVGs and aligned Step 5 footer buttons
 
 **Blockers**: None
 
@@ -37,6 +38,6 @@
 - Verify onboarding interactions in target browsers
 - Decide on dynamic timeline logic for quest milestones
 
-**Stats**: Files: 7 | +unknown -unknown | Deps: none
+**Stats**: Files: 9 | +unknown -unknown | Deps: none
 
 **Notes**: Line counts not tracked in a non-git workspace.

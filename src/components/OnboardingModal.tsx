@@ -227,7 +227,7 @@ export function OnboardingModal() {
 
   return (
     <div className="onboarding-overlay">
-      <div className="onboarding-card">
+      <div className={`onboarding-card ${step === 5 ? 'step-5' : ''}`}>
         <div className="onboarding-top">
           <div className="onboarding-step">Step {step} of 5</div>
           <div className="onboarding-dots">
@@ -536,7 +536,22 @@ export function OnboardingModal() {
                     >
                       {tier === 2 ? <div className="quest-badge">Recommended</div> : null}
                       <div className="quest-icon">
-                        {tier === 1 ? '🛡️' : tier === 2 ? '🎯' : '👑'}
+                        {tier === 1 ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                          </svg>
+                        ) : tier === 2 ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" />
+                            <circle cx="12" cy="12" r="6" />
+                            <circle cx="12" cy="12" r="2" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+                            <path d="M5 21h14" />
+                          </svg>
+                        )}
                       </div>
                       <h3>{tier === 1 ? 'First Shield' : tier === 2 ? 'The Reckoning' : "Cadencio's Ambition"}</h3>
                       <p>

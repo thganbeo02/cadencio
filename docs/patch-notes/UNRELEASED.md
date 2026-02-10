@@ -15,6 +15,10 @@
 ### Fixed
 - Toggle switches now align cleanly when toggled; the thumb no longer looks offset.
 - Quest meta spacing now separates labels and values for clearer readability.
+- Step 5 modal expansion keeps footer buttons anchored to their usual position.
+
+### Adjusted
+- Quest tier icons now use consistent Lucide SVGs that match the Cadencio theme.
 
 ## 2026-02-09
 

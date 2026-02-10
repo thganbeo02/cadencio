@@ -646,6 +646,11 @@ body {
   flex-direction: column;
   height: 680px;
   max-height: 90vh;
+  transition: width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.onboarding-card.step-5 {
+  width: min(1000px, 92vw);
 }
 
 .onboarding-top {
@@ -668,6 +673,12 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.onboarding-card.step-5 .onboarding-footer {
+  width: min(600px, 100%);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .onboarding-footer .footer-left,
@@ -1259,8 +1270,13 @@ body {
   background: rgba(107, 91, 255, 0.12);
   display: grid;
   place-items: center;
-  font-size: 22px;
+  color: #6b5bff;
   margin-bottom: 12px;
+}
+
+.quest-icon svg {
+  width: 28px;
+  height: 28px;
 }
 
 .onboarding-quest-card h3 {

@@ -1,5 +1,5 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-10 16:58
+Last Updated: 2026-02-10 19:48
 
 ================================================================================
 2026-02-09 - Phase 1 Scaffold Reset
@@ -68,5 +68,20 @@ What Changed (Technical):
   - Added VND prefix handling, comma formatting, and numeric input normalization
   - Refactored obligations list into row-based layout with updated priority colors
   - Tuned toggle switch styling and quest meta spacing
+
+Files: src/components/OnboardingModal.tsx, src/index.css
+
+---
+
+FEATURE: Quest Step Layout Tuning
+--------
+What Changed (Human):
+  - Quest selection icons now match the app theme
+  - Step 5 modal expansion keeps footer buttons aligned with earlier steps
+
+What Changed (Technical):
+  - Replaced Step 5 emoji icons with inline Lucide SVGs
+  - Added step-specific width and footer alignment rules
+  - Smoothed modal width transition on Step 5
 
 Files: src/components/OnboardingModal.tsx, src/index.css
