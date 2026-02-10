@@ -1,0 +1,72 @@
+CADENCIO - CHANGELOG
+Last Updated: 2026-02-10 16:58
+
+================================================================================
+2026-02-09 - Phase 1 Scaffold Reset
+================================================================================
+
+FEATURE: Fresh Foundation
+--------
+What Changed (Human):
+  - Repository reset and re-initialized to a clean, minimal frontend scaffold
+  - Official specs retained as the single source of truth
+
+What Changed (Technical):
+  - Added Vite + React + TypeScript + Tailwind baseline
+  - Added ESLint baseline and dependency set for the new rebuild
+
+Files: package.json, vite.config.ts, tsconfig.json, tailwind.config.js,
+       postcss.config.js, src/main.tsx, src/App.tsx, src/index.css
+
+================================================================================
+2026-02-09 - Dashboard Data Wiring
+================================================================================
+
+FEATURE: Live Due Soon + Progress Ring
+-------------------------------------
+What Changed (Human):
+  - Due Soon cards now reflect real obligations due in the next 7 days
+  - Progress ring now reflects confirmed obligation payments vs quest target
+  - Added confirmation modal for marking obligations paid
+
+What Changed (Technical):
+  - Added live Dexie query for obligations, quests, transactions, and timezone
+  - Computed progress percent from obligation_payment tagged transactions
+  - Wired modal flow to confirmObligationPaid service
+
+Files: src/App.tsx
+
+================================================================================
+2026-02-10 - Onboarding UI + Cadencio Rename
+================================================================================
+
+FEATURE: Cadencio Project Rename
+--------
+What Changed (Human):
+  - Spec and onboarding docs now use Cadencio naming
+  - Project file names no longer reference Sovereign Ledger
+
+What Changed (Technical):
+  - Renamed spec and onboarding markdown files to Cadencio variants
+  - Updated README and spec references to new filenames
+  - Synced lockfile names with package.json
+
+Files: README.md, cadencio-project-spec.md, cadencio-onboarding.md,
+       package-lock.json, node_modules/.package-lock.json
+
+---
+
+FEATURE: Onboarding Modal Polish
+--------
+What Changed (Human):
+  - Onboarding modal is now a square layout with clearer hierarchy
+  - Inputs now show VND formatting with comma separators for large values
+  - Obligations list is denser with a single card and clearer priorities
+
+What Changed (Technical):
+  - Adjusted modal sizing and typography scale for onboarding screens
+  - Added VND prefix handling, comma formatting, and numeric input normalization
+  - Refactored obligations list into row-based layout with updated priority colors
+  - Tuned toggle switch styling and quest meta spacing
+
+Files: src/components/OnboardingModal.tsx, src/index.css
