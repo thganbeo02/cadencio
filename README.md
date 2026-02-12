@@ -28,3 +28,9 @@ npm run preview
 - `changelog.txt`
 - `docs/daily-log.md`
 - `docs/patch-notes/UNRELEASED.md`
+
+## Future Roadmap
+
+- **AI Copilot**: Natural language planning for complex, multi-phase debt schedules.
+- **Salary Runbook**: A guided step-by-step ritual to manage your money on Salary Day.
+- **Zone Drill-down**: Full auditable history for every asset zone and liability.

@@ -588,6 +588,11 @@ export function OnboardingModal() {
               <button className="onboarding-ghost" onClick={() => setStep((step - 1) as Step)}>Back</button>
             ) : null}
           </div>
+          {step === 3 ? (
+            <div className="footer-middle">
+              Total Obligations: <span className="num">{formatNumberWithCommas(obligationsSum)}</span> VND
+            </div>
+          ) : null}
           <div className="footer-right">
             {step === 1 ? (
               <div className="onboarding-action-group">

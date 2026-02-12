@@ -1,6 +1,118 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-10 19:48
+Last Updated: 2026-02-12 03:05
 
+================================================================================
+2026-02-12 - Dashboard Architecture & Functional Hub
+================================================================================
+
+FEATURE: Universal Add & Transaction Modal
+--------
+What Changed (Human):
+  - Added a central "Universal Add" modal to log spending, income, and obligation payments
+  - Modal features a large amount input, icon-based category grid, and note field
+  - Sized and styled to match the onboarding flow for visual consistency
+
+What Changed (Technical):
+  - Created TransactionModal component with tabbed navigation (Spend/Receive/Obligation)
+  - Implemented 5-column category grid with vertically-stacked Lucide icons
+  - Wired createTransaction service to handle validation and DB persistence
+  - Connected entry points from top bar, slim sidebar, and dashboard cards
+
+Files: src/components/TransactionModal.tsx, src/App.tsx, src/index.css
+
+---
+
+FEATURE: Zones & Internal Transfers
+--------
+What Changed (Human):
+  - You can now track where your money lives (HQ, Bank Savings, Hidden Cash)
+  - Added a "Transfer" action to move money between zones without counting as spend
+  - Zones show live balances with clear + / - signs and green/red color coding
+
+What Changed (Technical):
+  - Bumped Dexie DB to version 2; added 'zones' table and seeded defaults
+  - Implemented internal_transfer tag and fromZoneId/toZoneId meta for transfers
+  - Created TransferModal component for zone-to-zone movements
+  - Updated liveQuery to derive real-time balances per zone from the transaction ledger
+
+Files: src/types/index.ts, src/db/database.ts, src/db/seed.ts, 
+       src/services/transactions.ts, src/components/TransferModal.tsx, src/App.tsx
+
+---
+
+FEATURE: Dashboard Rework & Hero Quest
+--------
+What Changed (Human):
+  - Sidebar is now slim and icon-only, giving more room for your data
+  - Quest card is now a "Hero" section with a large progress ring and descriptive status
+  - Zones are prioritized at the top of the right column for immediate visibility
+  - Added a "Reset System" button in the sidebar to start over if needed
+
+What Changed (Technical):
+  - Refactored sidebar into icon-only button stack with Lucide SVGs
+  - Updated dashboard grid to 25/50/25% (1fr 2fr 1fr) column ratio
+  - Rebuilt hero-card layout with 2-column flexbox and 160x160 progress ring
+  - Applied "Same-day consolidation" to remove shadows and tune content padding
+
+Files: src/App.tsx, src/index.css
+
+---
+
+FEATURE: Obligation Planning Modal Refresh
+--------
+What Changed (Human):
+  - Planning obligations now uses a structured, single-screen layout with a summary strip and plan type controls
+  - Added an AI Copilot input placeholder for future natural-language planning
+  - Money fields now match onboarding’s VND prefix style with live comma formatting
+
+What Changed (Technical):
+  - Rebuilt ObligationPlanningModal layout and controls (summary, AI area, plan tabs, footer)
+  - Added CurrencyInput helper for comma-formatted numeric inputs
+  - Added planning modal styles and adjusted onboarding input padding for compact layouts
+
+Files: src/components/ObligationPlanningModal.tsx, src/index.css
+
+---
+
+FEATURE: Planning Flow Reliability + Due Soon Window
+--------
+What Changed (Human):
+  - Due Soon now shows obligations due within the next month (not just the next week)
+  - Planning flow no longer lands on a blank/error state after confirming a plan
+
+What Changed (Technical):
+  - Expanded Due Soon window from 7 → 30 days
+  - Clamped planner index and added loading/empty states to prevent null renders
+
+Files: src/App.tsx, src/components/ObligationPlanningModal.tsx
+
+---
+
+FEATURE: Roadmap Documentation Update
+--------
+What Changed (Human):
+  - Added a future roadmap covering AI Copilot, Salary Runbook, and Zone Drill-down
+
+What Changed (Technical):
+  - Appended roadmap sections to the spec and README
+
+Files: cadencio-project-spec.md, README.md
+
+---
+
+FEATURE: Onboarding Polish
+--------
+What Changed (Human):
+  - Step 3 now shows a live "Total Obligations" summary between the footer buttons
+
+What Changed (Technical):
+  - Added footer-middle alignment styles to index.css
+  - Injected sum calculation into OnboardingModal footer
+
+Files: src/components/OnboardingModal.tsx, src/index.css
+
+================================================================================
+2026-02-10 - Onboarding UI + Cadencio Rename
 ================================================================================
 2026-02-09 - Phase 1 Scaffold Reset
 ================================================================================
@@ -25,7 +137,7 @@ Files: package.json, vite.config.ts, tsconfig.json, tailwind.config.js,
 FEATURE: Live Due Soon + Progress Ring
 -------------------------------------
 What Changed (Human):
-  - Due Soon cards now reflect real obligations due in the next 7 days
+  - Due Soon cards now reflect real obligations due in the next 30 days
   - Progress ring now reflects confirmed obligation payments vs quest target
   - Added confirmation modal for marking obligations paid
 

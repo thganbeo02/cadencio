@@ -16,6 +16,14 @@ export interface CreateTransactionInput {
   dateISO?: string;
 }
 
+export interface CreateTransferInput {
+  amount: number;
+  fromZoneId: string;
+  toZoneId: string;
+  note?: string;
+  dateISO?: string;
+}
+
 function uniqueTags(tags: string[] | undefined): string[] | undefined {
   if (!tags || tags.length === 0) return undefined;
   const out: string[] = [];
@@ -56,4 +64,27 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
 
   await db.transactions.add(tx);
   return tx;
+}
+
+export async function createTransfer(input: CreateTransferInput): Promise<void> {
+  const note = input.note?.trim() ? input.note.trim() : undefined;
+  await createTransaction({
+    amount: input.amount,
+    direction: 'OUT',
+    categoryId: 'cat_transfer',
+    note,
+    tags: ['internal_transfer'],
+    meta: { fromZoneId: input.fromZoneId, toZoneId: input.toZoneId },
+    dateISO: input.dateISO,
+  });
+
+  await createTransaction({
+    amount: input.amount,
+    direction: 'IN',
+    categoryId: 'cat_transfer',
+    note,
+    tags: ['internal_transfer'],
+    meta: { fromZoneId: input.fromZoneId, toZoneId: input.toZoneId },
+    dateISO: input.dateISO,
+  });
 }

@@ -26,6 +26,15 @@ export interface Category {
   isFavorite?: boolean;
 }
 
+export type ZoneKind = 'asset' | 'flow' | 'liability';
+
+export interface Zone {
+  id: string;
+  name: string;
+  kind: ZoneKind;
+  createdAt: number;
+}
+
 export type ObligationPriority = 1 | 2 | 3;
 
 export interface Obligation {

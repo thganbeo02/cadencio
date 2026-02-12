@@ -1,5 +1,5 @@
 import { db } from './database';
-import type { Category, Settings, SettingsRecord } from '../types';
+import type { Category, Settings, SettingsRecord, Zone } from '../types';
 
 const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat_food', name: 'Food & Drink', type: 'OUT', icon: '🍜', isFavorite: true },
@@ -8,7 +8,14 @@ const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat_health', name: 'Health', type: 'OUT', icon: '💊' },
   { id: 'cat_obligations', name: 'Obligations', type: 'OUT', icon: '📋' },
   { id: 'cat_salary', name: 'Salary', type: 'IN', icon: '💰', isFavorite: true },
+  { id: 'cat_transfer', name: 'Transfer', type: 'OUT', icon: '🔁' },
   { id: 'cat_other', name: 'Other', type: 'OUT', icon: '📦' },
+];
+
+const DEFAULT_ZONES: Zone[] = [
+  { id: 'zone_hq', name: 'HQ (Salary In)', kind: 'asset', createdAt: Date.now() },
+  { id: 'zone_bank_savings', name: 'Bank Savings', kind: 'asset', createdAt: Date.now() },
+  { id: 'zone_hidden_cash', name: 'Hidden Cash', kind: 'asset', createdAt: Date.now() },
 ];
 
 const DEFAULT_SETTINGS: Settings = {
@@ -31,13 +38,18 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 export async function seedDatabase(): Promise<void> {
-  const [categoryCount, settingsRecord] = await Promise.all([
+  const [categoryCount, zoneCount, settingsRecord] = await Promise.all([
     db.categories.count(),
+    db.zones.count(),
     db.settings.get('settings'),
   ]);
 
   if (categoryCount === 0) {
     await db.categories.bulkAdd(DEFAULT_CATEGORIES);
+  }
+
+  if (zoneCount === 0) {
+    await db.zones.bulkAdd(DEFAULT_ZONES);
   }
 
   if (!settingsRecord) {

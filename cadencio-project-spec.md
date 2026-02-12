@@ -484,7 +484,26 @@ Server-side Zod validation. Reject malformed outputs.
 
 ---
 
-## 11) Phase Plan
+## 11) Future Roadmap (High-Impact Implementations)
+
+### AI Copilot for Complex Planning
+- **Natural Language Input**: Allows users to describe complex multi-phase schedules (e.g., "Pay 20M/mo for 3 months, then 10M/mo until finished").
+- **Intent-Driven Suggestions**: Chips for "Faster Payoff," "Lower Monthly," or "Best Balance" that instantly re-calculate the entire schedule.
+- **Safety Guardrails**: AI suggests, but the user must Review & Confirm before any cycles are generated.
+
+### Salary-Cycle "Runbook" (The Monthly Ritual)
+- **Guided Reset Window**: Automatically detects when it's Salary Day and offers a step-by-step wizard.
+- **Flow**: Confirm Salary Received → Fund Zones (Bank Savings/Hidden Cash) → Confirm P1 Obligations → Reset Monthly Spend Cap.
+- **Ritual Persistence**: Tracks progress through the runbook so the user can pause and return.
+
+### Zone Ledger & "Where did it go?" Drill-down
+- **Transparent Audit**: Every zone gets a detailed ledger showing every transaction and internal transfer affecting its balance.
+- **One-Click Explanations**: "Why did my HQ balance drop by 5M?" → Show 2M transfer to Savings, 1M to Mom (P1), and 2M in Daily Spend.
+- **Anxiety Reduction**: Provides total accountability and trust in the reported numbers.
+
+---
+
+## 12) Phase Plan
 
 ### Phase 1 — MVP (2–4 weeks, ship fast, daily usable)
 - Dashboard (Next Actions + Status + Heatmap + Quest card)
