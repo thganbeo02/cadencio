@@ -364,6 +364,7 @@ body {
   border-radius: 32px;
   background: var(--card);
   border: 1px solid var(--border);
+  min-height: 380px;
 }
 
 .hero-content {
@@ -372,7 +373,7 @@ body {
 }
 
 .hero-label {
-  font-size: 20px;
+  font-size: 32px;
   font-weight: 700;
   color: var(--primary);
 }
@@ -381,7 +382,7 @@ body {
   display: inline-flex;
   align-items: baseline;
   gap: 12px;
-  font-size: 44px;
+  font-size: 32px;
   font-weight: 700;
   color: var(--text);
   line-height: 1.05;
@@ -408,17 +409,55 @@ body {
 
 .progress-ring-container {
   position: relative;
-  width: 200px;
-  height: 200px;
+  width: 300px;
+  height: 300px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .progress-ring {
-  width: 200px;
-  height: 200px;
+  width: 300px;
+  height: 300px;
   transform: rotate(-90deg);
+}
+
+.quest-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.quest-detail {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--card-soft);
+}
+
+.quest-sparkline {
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  gap: 4px;
+  align-items: end;
+  height: 34px;
+  margin-top: 10px;
+}
+
+.quest-sparkline span {
+  display: block;
+  border-radius: 999px;
+  opacity: 0.9;
+}
+
+@media (max-width: 840px) {
+  .hero-card {
+    min-height: 320px;
+  }
+
+  .quest-details-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .progress-ring-bg {
@@ -1211,6 +1250,15 @@ body {
   font-size: 16px;
 }
 
+.onboarding-primary:disabled,
+.onboarding-primary[disabled] {
+  background: #d1d5db;
+  color: #9ca3af;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+
 .onboarding-obligations {
   display: block;
 }
@@ -1790,6 +1838,10 @@ body {
   padding: 40px;
 }
 
+.planning-card .onboarding-label {
+  margin-bottom: 0;
+}
+
 .planning-header {
   display: flex;
   flex-direction: column;
@@ -2007,6 +2059,82 @@ body {
 .planning-fields {
   display: grid;
   gap: 20px;
+}
+
+.recent-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.recent-action-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-radius: 14px;
+  background: var(--card-soft);
+  border: 1px solid var(--border-soft);
+}
+
+.recent-action-badge {
+  width: 44px;
+  height: 36px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  justify-self: start;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #4338ca;
+  background: rgba(107, 91, 255, 0.12);
+}
+
+.recent-action-badge.type-confirmed_paid {
+  color: #fff;
+  background: #ef4444;
+}
+
+.recent-action-badge.type-transaction_added.dir-in {
+  color: #065f46;
+  background: rgba(16, 185, 129, 0.18);
+}
+
+.recent-action-badge.type-transaction_added.dir-out {
+  color: #991b1b;
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.recent-action-badge.type-transfer_created {
+  color: #4c1d95;
+  background: rgba(107, 91, 255, 0.2);
+}
+
+.recent-action-badge.type-obligation_planned {
+  color: #1f2937;
+  background: rgba(55, 65, 81, 0.12);
+}
+
+.recent-action-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.recent-action-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.recent-action-amount {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
 }
 
 @media (max-width: 840px) {

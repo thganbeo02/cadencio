@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Category, Obligation, Quest, SettingsRecord, Transaction, Zone } from '../types';
+import type { Activity, Category, Obligation, Quest, SettingsRecord, Transaction, Zone } from '../types';
 
 class CadencioDatabase extends Dexie {
   transactions!: Table<Transaction, string>;
@@ -8,6 +8,7 @@ class CadencioDatabase extends Dexie {
   obligations!: Table<Obligation, string>;
   quests!: Table<Quest, string>;
   settings!: Table<SettingsRecord, string>;
+  activities!: Table<Activity, string>;
 
   constructor() {
     super('CadencioDB');
@@ -31,4 +32,14 @@ db.version(2).stores({
   obligations: 'id, priority',
   quests: 'id, createdAt',
   settings: 'id',
+});
+
+db.version(3).stores({
+  transactions: 'id, dateISO, direction, categoryId, createdAt',
+  categories: 'id, name, type, isFavorite',
+  zones: 'id, kind, createdAt',
+  obligations: 'id, priority',
+  quests: 'id, createdAt',
+  settings: 'id',
+  activities: 'id, type, createdAt',
 });

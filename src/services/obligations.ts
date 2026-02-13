@@ -3,6 +3,7 @@ import type { Obligation, ObligationCycle, ObligationPriority } from '../types';
 import { makeId } from '../utils/id';
 import { createTransaction } from './transactions';
 import { dateISOInTimeZone } from '../utils/dates';
+import { addActivity } from './activities';
 
 export interface CreateObligationInput {
   name: string;
@@ -52,6 +53,9 @@ export async function scheduleObligation(obligationId: string, plan: ObligationP
   const obl = await db.obligations.get(obligationId);
   if (!obl) throw new Error('Obligation not found');
   if (obl.totalAmount <= 0) return;
+
+  const prevCycles = obl.cycles.slice();
+  const prevTotalAmount = obl.totalAmount;
 
   const newCycles: ObligationCycle[] = [];
   const total = obl.totalAmount;
@@ -115,6 +119,16 @@ export async function scheduleObligation(obligationId: string, plan: ObligationP
 
   const merged = [...obl.cycles, ...newCycles].sort((a, b) => a.dueDateISO.localeCompare(b.dueDateISO));
   await db.obligations.update(obligationId, { cycles: merged });
+
+  await addActivity({
+    type: 'obligation_planned',
+    title: 'Planned obligation',
+    meta: {
+      obligationName: obl.name,
+      planType: plan.type,
+    },
+    undo: { kind: 'obligation_planned', obligationId, prevCycles, prevTotalAmount },
+  });
 }
 
 export async function refreshMissedObligationCycles(now: Date = new Date()): Promise<void> {
@@ -142,12 +156,15 @@ export async function refreshMissedObligationCycles(now: Date = new Date()): Pro
 }
 
 export async function confirmObligationPaid(obligationId: string, cycleId: string, paidAmount: number): Promise<void> {
-  await db.transaction('rw', db.obligations, db.transactions, async () => {
+  await db.transaction('rw', db.obligations, db.transactions, db.settings, db.activities, async () => {
     const obl = await db.obligations.get(obligationId);
     if (!obl) throw new Error('Obligation not found');
 
     const cycle = obl.cycles.find((c) => c.id === cycleId);
     if (!cycle) throw new Error('Cycle not found');
+
+    const prevCycle = { ...cycle };
+    const prevTotalAmount = obl.totalAmount;
 
     const amount = Math.max(0, Math.round(paidAmount));
     if (!amount) throw new Error('Amount must be > 0');
@@ -166,6 +183,7 @@ export async function confirmObligationPaid(obligationId: string, cycleId: strin
       confirmedAt: now,
       dateISO,
       meta: { relatedObligationCycleId: cycleId },
+      suppressActivity: true,
     });
 
     const cycles = obl.cycles.map((c) =>
@@ -177,6 +195,24 @@ export async function confirmObligationPaid(obligationId: string, cycleId: strin
     await db.obligations.update(obligationId, {
       totalAmount: Math.max(obl.totalAmount - amount, 0),
       cycles,
+    });
+
+    await addActivity({
+      type: 'confirmed_paid',
+      title: 'Confirmed paid',
+      amount,
+      direction: 'OUT',
+      meta: {
+        obligationName: obl.name,
+      },
+      undo: {
+        kind: 'confirmed_paid',
+        obligationId,
+        cycleId,
+        prevCycle,
+        prevTotalAmount,
+        txId: tx.id,
+      },
     });
   });
 }

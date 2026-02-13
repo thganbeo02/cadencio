@@ -1,7 +1,8 @@
 import { db } from '../db/database';
-import type { Transaction, TransactionDirection } from '../types';
+import type { ActivityType, Transaction, TransactionDirection } from '../types';
 import { makeId } from '../utils/id';
 import { dateISOInTimeZone } from '../utils/dates';
+import { addActivity } from './activities';
 
 export type FrictionTag = 'need' | 'growth';
 
@@ -14,6 +15,7 @@ export interface CreateTransactionInput {
   confirmedAt?: number;
   meta?: Transaction['meta'];
   dateISO?: string;
+  suppressActivity?: boolean;
 }
 
 export interface CreateTransferInput {
@@ -63,12 +65,32 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
   };
 
   await db.transactions.add(tx);
+
+  if (!input.suppressActivity && !tx.tags?.includes('internal_transfer')) {
+    const activityType: ActivityType = 'transaction_added';
+    const title = tx.categoryId === 'cat_obligations'
+      ? 'Obligation logged'
+      : tx.direction === 'IN'
+        ? 'Income logged'
+        : 'Expense recorded';
+    await addActivity({
+      type: activityType,
+      title,
+      amount: tx.amount,
+      direction: tx.direction,
+      meta: {
+        note: tx.note,
+        categoryId: tx.categoryId,
+      },
+      undo: { kind: 'transaction', txId: tx.id },
+    });
+  }
   return tx;
 }
 
 export async function createTransfer(input: CreateTransferInput): Promise<void> {
   const note = input.note?.trim() ? input.note.trim() : undefined;
-  await createTransaction({
+  const outTx = await createTransaction({
     amount: input.amount,
     direction: 'OUT',
     categoryId: 'cat_transfer',
@@ -76,9 +98,10 @@ export async function createTransfer(input: CreateTransferInput): Promise<void> 
     tags: ['internal_transfer'],
     meta: { fromZoneId: input.fromZoneId, toZoneId: input.toZoneId },
     dateISO: input.dateISO,
+    suppressActivity: true,
   });
 
-  await createTransaction({
+  const inTx = await createTransaction({
     amount: input.amount,
     direction: 'IN',
     categoryId: 'cat_transfer',
@@ -86,5 +109,18 @@ export async function createTransfer(input: CreateTransferInput): Promise<void> 
     tags: ['internal_transfer'],
     meta: { fromZoneId: input.fromZoneId, toZoneId: input.toZoneId },
     dateISO: input.dateISO,
+    suppressActivity: true,
+  });
+
+  await addActivity({
+    type: 'transfer_created',
+    title: 'Transfer created',
+    amount: input.amount,
+    meta: {
+      fromZoneId: input.fromZoneId,
+      toZoneId: input.toZoneId,
+      note,
+    },
+    undo: { kind: 'transfer', txIds: [outTx.id, inTx.id] },
   });
 }

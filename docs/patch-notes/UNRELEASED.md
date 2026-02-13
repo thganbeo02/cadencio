@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-02-13
+
+### New
+- **Recent Actions**: A new card shows your 5 most recent actions (planning, logging, confirming, transfers) and lets you undo all listed actions in one click.
+  - Helps you quickly fix mistakes without digging through screens.
+
+### Enhanced
+- **Quest Progress**: Progress now reflects your net cash flow (IN − OUT), so income pushes the ring forward and spending pulls it back.
+  - The ring never goes below 0, but you'll still see the true net as a separate line.
+- **Quest Details**: Added a View Details modal with net, monthly net, and total in/out breakdowns.
+  - Includes remaining-to-target and a 30-day net trend sparkline.
+- **Hero Quest Card**: Increased the ring size and tuned typography for clearer at-a-glance progress.
+- **Recent Actions Copy**: Spend/income entries now show your chosen category (e.g., Food) with clearer labels.
+
+### Fixed
+- **Onboarding Step 2 Reset Day**: The Reset Day field now validates input and disables the Next button until a valid date (0–30) is entered. You'll see a clear error message if the date is invalid. The calendar icon was removed from inside the input to match the Monthly Spending Cap layout.
+- **Obligation Planning Modal**: Fixed a crash that caused a white screen when opening the planner. The modal now loads reliably after onboarding.
+- **Planning Flow UI**: Simplified the Monthly and Split plan types to match the One-time layout. All plans now use "Target Date" instead of separate Due Day and Start Month fields, making the flow more consistent.
+- **Confirm Paid**: Confirming an obligation now saves reliably and handles comma-formatted amounts correctly.
+
+### Adjusted
+- **Disabled Button Styling**: Primary buttons now show a gray, non-clickable appearance when disabled, making the state clearer.
+- **Recent Actions Alignment**: OUT/IN badges now align with the card header padding.
+- **Last OUT**: The card now reflects your latest real OUT transaction (hours if income is set, otherwise VND).
+
+---
+
 ## 2026-02-12
 
 ### New

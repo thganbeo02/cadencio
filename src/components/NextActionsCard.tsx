@@ -27,6 +27,10 @@ export function NextActionsCard() {
   const [paidAmountRaw, setPaidAmountRaw] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  function digitsOnly(raw: string): string {
+    return raw.replace(/[^\d]/g, '');
+  }
+
   useEffect(() => {
     refreshMissedObligationCycles();
   }, []);
@@ -61,7 +65,7 @@ export function NextActionsCard() {
 
   async function doConfirmPaid() {
     if (!confirm) return;
-    const n = Number(paidAmountRaw);
+    const n = Number(digitsOnly(paidAmountRaw));
     if (!Number.isFinite(n) || n <= 0) return;
     setIsSaving(true);
     try {

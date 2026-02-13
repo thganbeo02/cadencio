@@ -9,9 +9,10 @@ import { ObligationPlanningModal } from './components/ObligationPlanningModal';
 import { TransactionModal } from './components/TransactionModal';
 import { TransferModal } from './components/TransferModal';
 import { Modal } from './components/Modal';
-import type { Obligation, ObligationCycle, Quest, Zone } from './types';
+import type { Activity, Obligation, ObligationCycle, Quest, Zone } from './types';
 import { addDaysISO, dateISOInTimeZone } from './utils/dates';
 import { confirmObligationPaid } from './services/obligations';
+import { undoActivities } from './services/activities';
 
 type DueRow = {
   obligation: Obligation;
@@ -35,6 +36,10 @@ type ZoneItem = {
   transferable: boolean;
   zoneId?: string;
 };
+
+function digitsOnly(raw: string): string {
+  return raw.replace(/[^\d]/g, '');
+}
 
 function formatCompactVND(amount: number): string {
   if (amount >= 1_000_000_000) return (amount / 1_000_000_000).toFixed(1) + 'B';
@@ -74,7 +79,12 @@ export default function App() {
   const [dueRows, setDueRows] = useState<DueRow[]>([]);
   const [quest, setQuest] = useState<Quest | null>(null);
   const [questProgress, setQuestProgress] = useState(0);
+  const [questProgressAmount, setQuestProgressAmount] = useState(0);
   const [questTarget, setQuestTarget] = useState(0);
+  const [questNet, setQuestNet] = useState(0);
+  const [questNetIn, setQuestNetIn] = useState(0);
+  const [questNetOut, setQuestNetOut] = useState(0);
+  const [questNetHistory, setQuestNetHistory] = useState<number[]>([]);
   const [todayISO, setTodayISO] = useState('');
   const [pendingObligationCount, setPendingObligationCount] = useState(0);
   const [moneyInMonth, setMoneyInMonth] = useState(0);
@@ -86,11 +96,18 @@ export default function App() {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [paidAmountRaw, setPaidAmountRaw] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [showObligationPlanner, setShowObligationPlanner] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [transactionTab, setTransactionTab] = useState<'spend' | 'receive' | 'obligation'>('spend');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferFromZoneId, setTransferFromZoneId] = useState<string | undefined>(undefined);
+  const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const [showQuestDetails, setShowQuestDetails] = useState(false);
+  const [lastOutAmount, setLastOutAmount] = useState(0);
+  const [lastOutHours, setLastOutHours] = useState(0);
+  const [costPerHour, setCostPerHour] = useState(0);
 
   async function resetApp() {
     if (window.confirm("Reset all data and restart onboarding?")) {
@@ -131,19 +148,45 @@ export default function App() {
 
        const activeQuest = nextSettings?.activeQuestId ? await db.quests.get(nextSettings.activeQuestId) : undefined;
        const pending = obligations.filter((o) => o.totalAmount > 0 && o.cycles.length === 0).length;
-       const txs = await db.transactions.toArray();
+      const txs = await db.transactions.toArray();
       const allZones = await db.zones.toArray();
-      const paid = txs
-        .filter((tx) => tx.tags?.includes('obligation_payment'))
-        .reduce((sum, tx) => sum + tx.amount, 0);
+      const nonTransfer = txs.filter((tx) => !tx.tags?.includes('internal_transfer'));
+      const netIn = nonTransfer.filter((tx) => tx.direction === 'IN').reduce((sum, tx) => sum + tx.amount, 0);
+      const netOut = nonTransfer.filter((tx) => tx.direction === 'OUT').reduce((sum, tx) => sum + tx.amount, 0);
+      const net = netIn - netOut;
       const target = activeQuest?.targetAmount ?? nextSettings?.selfReportedDebt ?? 0;
-      const progress = target > 0 ? Math.min(paid / target, 1) : 0;
+      const progressAmount = Math.max(0, Math.min(net, target));
+      const progress = target > 0 ? Math.min(progressAmount / target, 1) : 0;
+
+      const days: string[] = [];
+      for (let i = 29; i >= 0; i -= 1) {
+        days.push(addDaysISO(nowISO, -i));
+      }
+      const dailyNet: Record<string, number> = {};
+      for (const day of days) dailyNet[day] = 0;
+      for (const tx of nonTransfer) {
+        if (dailyNet[tx.dateISO] !== undefined) {
+          dailyNet[tx.dateISO] += tx.direction === 'IN' ? tx.amount : -tx.amount;
+        }
+      }
+      const netHistory = days.map((day) => dailyNet[day] ?? 0);
 
       const currentMonth = nowISO.slice(0, 7);
       const monthTxs = txs.filter((tx) => tx.dateISO.startsWith(currentMonth) && !tx.tags?.includes('internal_transfer'));
       const inMonth = monthTxs.filter((tx) => tx.direction === 'IN').reduce((sum, tx) => sum + tx.amount, 0);
       const outMonth = monthTxs.filter((tx) => tx.direction === 'OUT').reduce((sum, tx) => sum + tx.amount, 0);
       const obligationsTotal = obligations.reduce((sum, obl) => sum + obl.totalAmount, 0);
+
+      const hourly = nextSettings?.monthlyIncome && nextSettings?.hoursPerWeek
+        ? nextSettings.monthlyIncome / (nextSettings.hoursPerWeek * 4)
+        : 0;
+      const lastOutTx = nonTransfer
+        .filter((tx) => tx.direction === 'OUT')
+        .sort((a, b) => b.createdAt - a.createdAt)[0];
+      const lastOutValue = lastOutTx?.amount ?? 0;
+      const lastOutTime = hourly > 0 ? lastOutValue / hourly : 0;
+
+      const activities = await db.activities.orderBy('createdAt').reverse().limit(5).toArray();
 
       const balances: Record<string, number> = {};
       allZones.forEach((zone) => {
@@ -173,12 +216,17 @@ export default function App() {
         }
       }
 
-      return { rows, activeQuest, progress, target, nowISO, pending, inMonth, outMonth, obligationsTotal, allZones, balances, obligations };
-    }).subscribe(({ rows, activeQuest, progress, target, nowISO, pending, inMonth, outMonth, obligationsTotal, allZones, balances, obligations }) => {
+      return { rows, activeQuest, progress, progressAmount, target, net, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly };
+    }).subscribe(({ rows, activeQuest, progress, progressAmount, target, net, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly }) => {
       setDueRows(rows);
       setQuest(activeQuest ?? null);
       setQuestProgress(progress);
+      setQuestProgressAmount(progressAmount);
       setQuestTarget(target);
+      setQuestNet(net);
+      setQuestNetIn(netIn);
+      setQuestNetOut(netOut);
+      setQuestNetHistory(netHistory);
       setTodayISO(nowISO);
       setPendingObligationCount(pending);
       setMoneyInMonth(inMonth);
@@ -187,6 +235,10 @@ export default function App() {
       setZones(allZones);
       setZoneBalances(balances);
       setAllObligations(obligations);
+      setRecentActivities(activities);
+      setLastOutAmount(lastOutValue);
+      setLastOutHours(lastOutTime);
+      setCostPerHour(hourly);
     });
     return () => sub.unsubscribe();
   }, []);
@@ -224,16 +276,107 @@ export default function App() {
 
   async function doConfirmPaid() {
     if (!confirm) return;
-    const n = Number(paidAmountRaw);
-    if (!Number.isFinite(n) || n <= 0) return;
+    const n = Number(digitsOnly(paidAmountRaw));
+    if (!Number.isFinite(n) || n <= 0) {
+      setConfirmError('Enter a valid amount.');
+      return;
+    }
     setIsSaving(true);
     try {
       await confirmObligationPaid(confirm.obligationId, confirm.cycleId, n);
       setConfirm(null);
+      setConfirmError(null);
+      setPaidAmountRaw('');
+    } catch (e) {
+      setConfirmError(e instanceof Error ? e.message : 'Failed to confirm payment.');
     } finally {
       setIsSaving(false);
     }
   }
+
+  async function undoRecentActivities() {
+    if (!recentActivities.length) return;
+    setUndoError(null);
+    try {
+      const latest = await db.activities.orderBy('createdAt').reverse().limit(5).toArray();
+      const latestIds = latest.map((a) => a.id).join('|');
+      const currentIds = recentActivities.map((a) => a.id).join('|');
+      if (latestIds !== currentIds) {
+        setUndoError('Recent actions changed. Refresh to undo latest.');
+        return;
+      }
+      await undoActivities(recentActivities.map((a) => a.id));
+    } catch (e) {
+      setUndoError(e instanceof Error ? e.message : 'Failed to undo actions.');
+    }
+  }
+
+  const zoneNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    zones.forEach((z) => {
+      map[z.id] = z.name;
+    });
+    return map;
+  }, [zones]);
+
+  function formatActivityTime(ts: number): string {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function activitySubtitle(activity: Activity): string {
+    if (activity.type === 'obligation_planned') {
+      return activity.meta?.obligationName ? `Plan · ${activity.meta.obligationName}` : 'Plan saved';
+    }
+    if (activity.type === 'confirmed_paid') {
+      return activity.meta?.obligationName ? `Paid · ${activity.meta.obligationName}` : 'Paid';
+    }
+    if (activity.type === 'transfer_created') {
+      const from = activity.meta?.fromZoneId ? zoneNameById[activity.meta.fromZoneId] : '';
+      const to = activity.meta?.toZoneId ? zoneNameById[activity.meta.toZoneId] : '';
+      if (from && to) return `${from} → ${to}`;
+      return 'Transfer';
+    }
+    if (activity.type === 'transaction_added') {
+      if (activity.meta?.note) return activity.meta.note;
+      return activity.direction === 'IN' ? 'Income' : 'Expense';
+    }
+    return '';
+  }
+
+  function activityTitle(activity: Activity): string {
+    if (activity.type === 'transaction_added') {
+      const id = activity.meta?.categoryId ?? '';
+      if (id === 'cat_food') return 'Food';
+      if (id === 'cat_transport') return 'Transport';
+      if (id === 'cat_utilities') return 'Utilities';
+      if (id === 'cat_fun') return 'Fun';
+      if (id === 'cat_growth') return 'Growth';
+      if (id === 'cat_salary') return 'Salary';
+      if (id === 'cat_freelance') return 'Freelance';
+      if (id === 'cat_gift') return 'Gift';
+      if (id === 'cat_refund') return 'Refund';
+      if (id === 'cat_obligations') return 'Obligations';
+      return activity.title;
+    }
+    return activity.title;
+  }
+
+  function activityBadge(activity: Activity): string {
+    if (activity.type === 'obligation_planned') return 'PLAN';
+    if (activity.type === 'confirmed_paid') return 'PAID';
+    if (activity.type === 'transfer_created') return 'MOVE';
+    if (activity.type === 'transaction_added') return activity.direction === 'IN' ? 'IN' : 'OUT';
+    return 'ACT';
+  }
+
+  function activityAmount(activity: Activity): string {
+    if (!activity.amount) return '';
+    const sign = activity.direction === 'IN' ? '+' : activity.direction === 'OUT' ? '-' : '';
+    return `${sign}${formatNumberWithCommas(activity.amount)} VND`;
+  }
+
+  const questRemaining = Math.max(0, (questTarget || 0) - questProgressAmount);
+  const maxNetAbs = Math.max(1, ...questNetHistory.map((v) => Math.abs(v)));
 
   if (isLoading) {
     return (
@@ -359,6 +502,7 @@ export default function App() {
                             plannedAmount: row.cycle.amount,
                           });
                           setPaidAmountRaw(String(row.cycle.amount));
+                          setConfirmError(null);
                         }}
                       >
                         Confirm Paid
@@ -429,7 +573,7 @@ export default function App() {
                   {questTarget > 0 ? formatCompactVND(questTarget) : '100M'} Recovery
                 </div>
                 <p className="hero-subtitle">You are steadily climbing from your financial low point. Milestone 2 (75M) is 3M away.</p>
-                <button className="pill hero-button">View Details</button>
+                <button className="pill hero-button" onClick={() => setShowQuestDetails(true)}>View Details</button>
               </div>
               <div className="hero-ring">
               <div className="progress-ring-container">
@@ -452,8 +596,8 @@ export default function App() {
                   />
                 </svg>
                   <div className="progress-ring-content">
-                    <span className="num" style={{ fontSize: '26px', fontWeight: 700, lineHeight: 1 }}>{formatCompactVND(Math.round(questProgress * (questTarget || 100_000_000)))}</span>
-                    <span className="small muted" style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '4px' }}>OF {formatCompactVND(questTarget || 100_000_000)}</span>
+                    <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{formatCompactVND(questProgressAmount)}</span>
+                    <span className="small muted" style={{ fontSize: '16px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '6px' }}>OF {formatCompactVND(questTarget || 100_000_000)}</span>
                   </div>
                 </div>
               </div>
@@ -532,8 +676,56 @@ export default function App() {
 
             <div className="card">
               <div className="row-title" style={{ marginBottom: 16 }}>Last OUT</div>
-              <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>≈ 1.4h</div>
-              <div className="small muted">Based on your cost-per-hour</div>
+              {lastOutAmount > 0 ? (
+                <>
+                  <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>
+                    {lastOutHours > 0 ? `≈ ${lastOutHours.toFixed(1)}h` : `${formatNumberWithCommas(lastOutAmount)} VND`}
+                  </div>
+                  <div className="small muted">
+                    {lastOutHours > 0
+                      ? `Based on your cost-per-hour (${formatNumberWithCommas(Math.round(costPerHour))} VND/h)`
+                      : 'Set monthly income to see cost-per-hour'}
+                  </div>
+                </>
+              ) : (
+                <div className="small muted">No recent OUT transactions.</div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="section-title" style={{ alignItems: 'center' }}>
+                <h2>Recent Actions</h2>
+                <button
+                  className="pill"
+                  onClick={() => void undoRecentActivities()}
+                  disabled={!recentActivities.length}
+                >
+                  Undo listed ({recentActivities.length})
+                </button>
+              </div>
+              <div className="recent-actions">
+                {recentActivities.length ? (
+                  recentActivities.map((activity) => (
+                    <div key={activity.id} className="recent-action-row">
+                      <div className={`recent-action-badge type-${activity.type} ${activity.direction === 'IN' ? 'dir-in' : activity.direction === 'OUT' ? 'dir-out' : ''}`}>
+                        {activityBadge(activity)}
+                      </div>
+                      <div className="recent-action-body">
+                        <div className="recent-action-title">{activityTitle(activity)}</div>
+                        <div className="recent-action-meta">
+                          <span>{activitySubtitle(activity)}</span>
+                          <span>•</span>
+                          <span>{formatActivityTime(activity.createdAt)}</span>
+                        </div>
+                      </div>
+                      <div className="recent-action-amount num">{activityAmount(activity)}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="small muted">No recent actions yet.</div>
+                )}
+              </div>
+              {undoError ? <div className="small" style={{ color: '#ef4444', marginTop: 8 }}>{undoError}</div> : null}
             </div>
           </section>
         </div>
@@ -549,9 +741,56 @@ export default function App() {
             <label className="small muted">Paid amount (VND)</label>
             <input className="input num" value={paidAmountRaw} onChange={(e) => setPaidAmountRaw(e.target.value)} />
           </div>
+          {confirmError ? <div className="small" style={{ color: '#ef4444', marginTop: 8 }}>{confirmError}</div> : null}
           <div className="cta-row">
             <button className="pill" onClick={() => setConfirm(null)}>Cancel</button>
             <button className="pill primary" onClick={doConfirmPaid} disabled={isSaving}>Confirm</button>
+          </div>
+        </Modal>
+      ) : null}
+
+      {showQuestDetails ? (
+        <Modal title="Quest Details" description="Your progress toward the main quest." onClose={() => setShowQuestDetails(false)}>
+          <div className="card soft" style={{ marginBottom: 12 }}>
+            <div className="small muted">Progress</div>
+            <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>
+              {formatCompactVND(questProgressAmount)} out of {formatCompactVND(questTarget || 100_000_000)}
+            </div>
+            <div className="small muted" style={{ marginTop: 4 }}>{percent}% complete</div>
+          </div>
+          <div className="card soft" style={{ marginBottom: 12 }}>
+            <div className="small muted">Remaining to target</div>
+            <div className="num" style={{ fontSize: 18, fontWeight: 700 }}>{formatCompactVND(questRemaining)} VND</div>
+            <div className="small muted" style={{ marginTop: 6 }}>30-day net trend</div>
+            <div className="quest-sparkline">
+              {questNetHistory.map((value, idx) => {
+                const height = 6 + Math.round((Math.abs(value) / maxNetAbs) * 22);
+                const color = value < 0 ? '#ef4444' : value > 0 ? '#10b981' : '#d1d5db';
+                return <span key={idx} style={{ height, background: color }} />;
+              })}
+            </div>
+          </div>
+          <div className="quest-details-grid">
+            <div className="quest-detail">
+              <div className="small muted">Net (All Time)</div>
+              <div className="num" style={{ color: questNet < 0 ? '#ef4444' : '#10b981' }}>
+                {questNet < 0 ? '-' : '+'}{formatCompactVND(Math.abs(questNet))} VND
+              </div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">This Month</div>
+              <div className="num" style={{ color: moneyInMonth - moneyOutMonth < 0 ? '#ef4444' : '#10b981' }}>
+                {moneyInMonth - moneyOutMonth < 0 ? '-' : '+'}{formatCompactVND(Math.abs(moneyInMonth - moneyOutMonth))} VND
+              </div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">Total In</div>
+              <div className="num">{formatCompactVND(questNetIn)} VND</div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">Total Out</div>
+              <div className="num">{formatCompactVND(questNetOut)} VND</div>
+            </div>
           </div>
         </Modal>
       ) : null}

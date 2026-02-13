@@ -5,7 +5,7 @@ import type { ObligationPriority } from '../types';
 import { makeId } from '../utils/id';
 
 function clampDay(d: number): number {
-  return Math.min(28, Math.max(1, d));
+  return Math.min(30, Math.max(0, d));
 }
 
 function safeInt(raw: string, fallback: number): number {
@@ -77,6 +77,8 @@ export function OnboardingModal() {
   const capDisplay = capRaw ? formatNumberWithCommas(Number(capRaw)) : '';
   const selfDebtDisplay = selfDebtRaw ? formatNumberWithCommas(Number(selfDebtRaw)) : '';
   const costPerHourDisplay = formatNumberWithCommas(costPerHour > 0 ? costPerHour : DEFAULT_INCOME / 160);
+  const salaryDayValue = safeInt(salaryDayRaw, -1);
+  const isSalaryDayValid = Number.isFinite(salaryDayValue) && salaryDayValue >= 0 && salaryDayValue <= 30;
 
   const cleanedObligations = useMemo(() => {
     return drafts
@@ -306,15 +308,9 @@ export function OnboardingModal() {
                       <rect width="18" height="18" x="3" y="4" rx="2" />
                       <path d="M3 10h18" />
                     </svg>
-                    Reset Day
+                    Reset Day - When your monthly spending budget resets
                   </label>
                   <div className="onboarding-input-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M8 2v4" />
-                      <path d="M16 2v4" />
-                      <rect width="18" height="18" x="3" y="4" rx="2" />
-                      <path d="M3 10h18" />
-                    </svg>
                     <input
                       id="resetDay"
                       type="number"
@@ -323,7 +319,9 @@ export function OnboardingModal() {
                       onChange={(e) => setSalaryDayRaw(e.target.value)}
                     />
                   </div>
-                  <p className="onboarding-helper">When your monthly spending budget resets</p>
+                  {!isSalaryDayValid ? (
+                    <p className="onboarding-helper">Enter a date between 0 to 30!</p>
+                  ) : null}
                 </div>
 
                 <div className="onboarding-field">
@@ -607,7 +605,7 @@ export function OnboardingModal() {
               </div>
             ) : null}
             {step !== 1 && step !== 4 ? (
-              <button className="onboarding-primary" onClick={() => void next()} disabled={isSaving}>
+              <button className="onboarding-primary" onClick={() => void next()} disabled={isSaving || (step === 2 && !isSalaryDayValid)}>
                 {step === 5 ? 'Finish' : 'Next'}
               </button>
             ) : null}

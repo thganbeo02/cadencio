@@ -1,5 +1,126 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-12 03:05
+Last Updated: 2026-02-13 17:20
+
+================================================================================
+2026-02-13 - UX Fixes, Activity Log, Quest Progress
+================================================================================
+
+FEATURE: Onboarding Step 2 Reset Day Validation
+--------
+What Changed (Human):
+  - Reset Day field now validates input (0–30) and shows error message if invalid
+  - Next button is disabled until a valid date is entered
+  - Disabled button now has gray styling to clearly show it's not clickable
+  - Removed duplicate calendar icon inside the input to match Monthly Spending Cap layout
+  - Helper text moved into label for cleaner visual hierarchy
+
+What Changed (Technical):
+  - Changed clampDay to accept 0–30 (was 1–28)
+  - Added isSalaryDayValid computed value for validation state
+  - Added conditional disabled prop on Next button for Step 2
+  - Removed calendar SVG from onboarding-input-icon wrapper
+  - Added disabled styling rules for .onboarding-primary button
+
+Files: src/components/OnboardingModal.tsx, src/index.css
+
+---
+
+FEATURE: ObligationPlanningModal Crash Fix
+--------
+What Changed (Human):
+  - Planning modal no longer crashes with white screen after onboarding
+
+What Changed (Technical):
+  - Fixed temporal dead zone issue by moving obligationsList declaration above useEffect
+  - obligationsList and current are now defined before the useEffect that depends on obligationsList.length
+
+Files: src/components/ObligationPlanningModal.tsx
+
+---
+
+FEATURE: Obligation Planning UI Simplification
+--------
+What Changed (Human):
+  - Monthly and Split plan types now use the same "Target Date" input as One-time
+  - Layout is consistent across all plan types, making the flow easier to understand
+  - Removed separate Due Day and Start Month fields for cleaner experience
+  - Target Date auto-derives the due day and start month used by the scheduler
+
+What Changed (Technical):
+  - Added monthlyTargetDateISO and splitTargetDateISO state
+  - Added applyTargetDate helper to derive due day and start month from target date
+  - Replaced 3-column Due Day/Start Month inputs with single Target Date input
+  - Added margin-bottom: 0 to .onboarding-label inside .planning-card
+
+Files: src/components/ObligationPlanningModal.tsx, src/index.css
+
+---
+
+FEATURE: Recent Actions + Undo
+--------
+What Changed (Human):
+  - Added a Recent Actions card showing the last 5 actions across planning, logging, transfers, and confirmations
+  - One-click undo reverts the most recent actions to fix mistakes fast
+  - Entries now display the chosen category (Food/Transport/etc.) and clearer labels
+  - IN/OUT badges are color-coded and aligned with the card header padding
+
+What Changed (Technical):
+  - Added Activity model and Dexie table (version bump)
+  - Logged activities for transactions, transfers, planning, and confirm-paid
+  - Implemented undo logic with per-action snapshots
+  - Added Recent Actions UI in right column with badges and timestamps
+  - Updated activity rendering to use category names and direction styling
+
+Files: src/types/index.ts, src/db/database.ts, src/services/activities.ts,
+       src/services/transactions.ts, src/services/obligations.ts, src/App.tsx, src/index.css
+
+---
+
+FEATURE: Quest Progress Net Tracking
+--------
+What Changed (Human):
+  - Quest progress now reflects net cash flow (income pushes forward, spending pulls back)
+  - Progress never shows below zero, but a net line reveals the true balance
+  - Quest Details modal shows net, monthly net, and total in/out
+  - Added remaining-to-target and 30-day net trend sparkline
+  - Hero Quest ring and labels are larger for clearer readability
+
+What Changed (Technical):
+  - Progress computed as clamp(sum(IN) - sum(OUT), 0..target)
+  - Transfers excluded from net calculations
+  - Hero ring and labels updated to use progress amount + net
+  - Added Quest Details modal with summary breakdowns
+  - Increased ring dimensions and tuned typography scale
+
+Files: src/App.tsx, src/index.css
+
+---
+
+FEATURE: Last OUT Real Data
+--------
+What Changed (Human):
+  - Last OUT now reflects your latest real OUT transaction
+  - Shows hours if monthly income is set; otherwise shows VND
+
+What Changed (Technical):
+  - Derived last OUT amount from most recent OUT transaction
+  - Calculated cost-per-hour from monthly income and hours/week
+
+Files: src/App.tsx
+
+---
+
+FEATURE: Confirm Paid Reliability
+--------
+What Changed (Human):
+  - Confirm Paid now saves reliably and validates comma-formatted amounts
+
+What Changed (Technical):
+  - Expanded Dexie transaction scope to include settings and activities
+  - Added digits-only parsing for confirm paid input
+  - Added error message feedback on failure
+
+Files: src/services/obligations.ts, src/components/NextActionsCard.tsx, src/App.tsx
 
 ================================================================================
 2026-02-12 - Dashboard Architecture & Functional Hub

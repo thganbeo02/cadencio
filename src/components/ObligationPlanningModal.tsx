@@ -74,11 +74,24 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
   const [monthlyAmountRaw, setMonthlyAmountRaw] = useState('');
   const [monthlyDueDayRaw, setMonthlyDueDayRaw] = useState('15');
   const [monthlyStartMonthISO, setMonthlyStartMonthISO] = useState('');
+  const [monthlyTargetDateISO, setMonthlyTargetDateISO] = useState('');
   const [splitUpfrontAmountRaw, setSplitUpfrontAmountRaw] = useState('');
   const [splitUpfrontDueISO, setSplitUpfrontDueISO] = useState('');
   const [splitMonthlyAmountRaw, setSplitMonthlyAmountRaw] = useState('');
   const [splitDueDayRaw, setSplitDueDayRaw] = useState('15');
   const [splitStartMonthISO, setSplitStartMonthISO] = useState('');
+  const [splitTargetDateISO, setSplitTargetDateISO] = useState('');
+
+  function applyTargetDate(rawISO: string, setTarget: (val: string) => void, setDueDay: (val: string) => void, setStartMonth: (val: string) => void) {
+    setTarget(rawISO);
+    const parts = rawISO.split('-');
+    if (parts.length !== 3) return;
+    const [year, month, day] = parts;
+    const parsedDay = Number(day);
+    if (!Number.isFinite(parsedDay)) return;
+    setDueDay(String(parsedDay));
+    setStartMonth(`${year}-${month}-01`);
+  }
 
   useEffect(() => {
     const sub = liveQuery(async () => {
@@ -91,15 +104,15 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
     return () => sub.unsubscribe();
   }, []);
 
+  const obligationsList = obligations ?? [];
+  const current = obligationsList[idx] ?? null;
+
   useEffect(() => {
     if (!obligationsList.length) return;
     if (idx >= obligationsList.length) {
       setIdx(Math.max(0, obligationsList.length - 1));
     }
   }, [idx, obligationsList.length]);
-
-  const obligationsList = obligations ?? [];
-  const current = obligationsList[idx] ?? null;
 
   const suggestion = useMemo(() => {
     if (!settings || !current || !settings.monthlyIncome) return null;
@@ -133,12 +146,14 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
     setMonthlyAmountRaw(String(Math.max(50_000, Math.round(current.totalAmount / 6))));
     setMonthlyDueDayRaw(String(settings.salaryDay));
     setMonthlyStartMonthISO(todayISO.slice(0, 7) + '-01');
+    setMonthlyTargetDateISO(todayISO);
 
     setSplitUpfrontAmountRaw(String(Math.round(current.totalAmount * 0.3)));
     setSplitUpfrontDueISO(todayISO);
     setSplitMonthlyAmountRaw(String(Math.max(50_000, Math.round(current.totalAmount / 9))));
     setSplitDueDayRaw(String(settings.salaryDay));
     setSplitStartMonthISO(todayISO.slice(0, 7) + '-01');
+    setSplitTargetDateISO(todayISO);
   }, [settings, current, idx, suggestion?.kind]);
 
   if (!settings || obligations === null) {
@@ -313,7 +328,7 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
           )}
 
           {mode === 'monthly' && (
-            <div className="onboarding-grid" style={{ gridTemplateColumns: '1fr 0.6fr 0.8fr' }}>
+            <div className="onboarding-grid">
               <CurrencyInput
                 label="Monthly Amount"
                 value={monthlyAmountRaw}
@@ -321,12 +336,13 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
                 placeholder="2,000,000"
               />
               <div className="onboarding-field">
-                <label className="onboarding-label">Due Day</label>
-                <input className="onboarding-input-field num" value={monthlyDueDayRaw} onChange={(e) => setMonthlyDueDayRaw(e.target.value)} />
-              </div>
-              <div className="onboarding-field">
-                <label className="onboarding-label">Start Month</label>
-                <input className="onboarding-input-field num" type="month" value={monthlyStartMonthISO.slice(0, 7)} onChange={(e) => setMonthlyStartMonthISO(`${e.target.value}-01`)} />
+                <label className="onboarding-label">Target Date</label>
+                <input
+                  className="onboarding-input-field num"
+                  type="date"
+                  value={monthlyTargetDateISO}
+                  onChange={(e) => applyTargetDate(e.target.value, setMonthlyTargetDateISO, setMonthlyDueDayRaw, setMonthlyStartMonthISO)}
+                />
               </div>
             </div>
           )}
@@ -345,20 +361,21 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
                   <input className="onboarding-input-field num" type="date" value={splitUpfrontDueISO} onChange={(e) => setSplitUpfrontDueISO(e.target.value)} />
                 </div>
               </div>
-              <div className="onboarding-grid" style={{ gridTemplateColumns: '1fr 0.6fr 0.8fr' }}>
+              <div className="onboarding-grid">
                 <CurrencyInput
-                  label="Monthly Remainder"
+                  label="Monthly Amount"
                   value={splitMonthlyAmountRaw}
                   onChange={setSplitMonthlyAmountRaw}
                   placeholder="1,000,000"
                 />
                 <div className="onboarding-field">
-                  <label className="onboarding-label">Due Day</label>
-                  <input className="onboarding-input-field num" value={splitDueDayRaw} onChange={(e) => setSplitDueDayRaw(e.target.value)} />
-                </div>
-                <div className="onboarding-field">
-                  <label className="onboarding-label">Start Month</label>
-                  <input className="onboarding-input-field num" type="month" value={splitStartMonthISO.slice(0, 7)} onChange={(e) => setSplitStartMonthISO(`${e.target.value}-01`)} />
+                  <label className="onboarding-label">Target Date</label>
+                  <input
+                    className="onboarding-input-field num"
+                    type="date"
+                    value={splitTargetDateISO}
+                    onChange={(e) => applyTargetDate(e.target.value, setSplitTargetDateISO, setSplitDueDayRaw, setSplitStartMonthISO)}
+                  />
                 </div>
               </div>
             </div>
