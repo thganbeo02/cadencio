@@ -9,9 +9,9 @@ import { ObligationPlanningModal } from './components/ObligationPlanningModal';
 import { TransactionModal } from './components/TransactionModal';
 import { TransferModal } from './components/TransferModal';
 import { Modal } from './components/Modal';
-import type { Activity, Obligation, ObligationCycle, Quest, Zone } from './types';
+import type { Activity, Obligation, ObligationCycle, Zone } from './types';
 import { addDaysISO, dateISOInTimeZone } from './utils/dates';
-import { confirmObligationPaid } from './services/obligations';
+import { confirmObligationPaid, createObligation } from './services/obligations';
 import { undoActivities } from './services/activities';
 
 type DueRow = {
@@ -37,6 +37,11 @@ type ZoneItem = {
   zoneId?: string;
 };
 
+type HeatmapDay = {
+  dateISO: string;
+  amount: number;
+};
+
 function digitsOnly(raw: string): string {
   return raw.replace(/[^\d]/g, '');
 }
@@ -52,6 +57,21 @@ function formatNumberWithCommas(value: number): string {
   const n = Math.round(value);
   if (!Number.isFinite(n)) return '0';
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function formatMillions(amount: number): string {
+  const n = amount / 1_000_000;
+  if (!Number.isFinite(n)) return '0.0M';
+  return `${n.toFixed(1)}M`;
+}
+
+function formatVnd(amount: number, options?: { compact?: boolean; isFocus?: boolean; showSign?: boolean }): string {
+  if (options?.isFocus) return '****';
+  const abs = Math.abs(amount);
+  const base = options?.compact ? formatCompactVND(abs) : formatNumberWithCommas(abs);
+  if (!options?.showSign) return base;
+  const sign = amount < 0 ? '-' : amount > 0 ? '+' : '';
+  return `${sign}${base}`;
 }
 
 function daysBetweenISO(fromISO: string, toISO: string): number {
@@ -73,15 +93,31 @@ function priorityLabel(priority: 1 | 2 | 3): string {
   return 'P3 STANDARD';
 }
 
+function heatmapLevel(amount: number, dailyCap: number): number {
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  if (!Number.isFinite(dailyCap) || dailyCap <= 0) return 0;
+  const ratio = amount / dailyCap;
+  if (ratio <= 0.5) return 1;
+  if (ratio <= 0.9) return 2;
+  if (ratio <= 1.1) return 3;
+  return 4;
+}
+
+function weekdayIndex(dateISO: string): number {
+  const day = new Date(`${dateISO}T00:00:00Z`).getUTCDay();
+  return (day + 6) % 7;
+}
+
 export default function App() {
-  const { settings, loadSettings, isLoading } = useAppStore();
+  const { settings, loadSettings, isLoading, setFocusMode } = useAppStore();
   useSettingsSync();
   const [dueRows, setDueRows] = useState<DueRow[]>([]);
-  const [quest, setQuest] = useState<Quest | null>(null);
   const [questProgress, setQuestProgress] = useState(0);
   const [questProgressAmount, setQuestProgressAmount] = useState(0);
   const [questTarget, setQuestTarget] = useState(0);
   const [questNet, setQuestNet] = useState(0);
+  const [questEarnedNet, setQuestEarnedNet] = useState(0);
+  const [borrowedPrincipal, setBorrowedPrincipal] = useState(0);
   const [questNetIn, setQuestNetIn] = useState(0);
   const [questNetOut, setQuestNetOut] = useState(0);
   const [questNetHistory, setQuestNetHistory] = useState<number[]>([]);
@@ -89,6 +125,7 @@ export default function App() {
   const [pendingObligationCount, setPendingObligationCount] = useState(0);
   const [moneyInMonth, setMoneyInMonth] = useState(0);
   const [moneyOutMonth, setMoneyOutMonth] = useState(0);
+  const [spendOutMonth, setSpendOutMonth] = useState(0);
   const [obligationsRemaining, setObligationsRemaining] = useState(0);
   const [allObligations, setAllObligations] = useState<Obligation[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -99,7 +136,7 @@ export default function App() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [showObligationPlanner, setShowObligationPlanner] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  const [transactionTab, setTransactionTab] = useState<'spend' | 'receive' | 'obligation'>('spend');
+  const [transactionTab, setTransactionTab] = useState<'spend' | 'receive'>('spend');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [transferFromZoneId, setTransferFromZoneId] = useState<string | undefined>(undefined);
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
@@ -108,6 +145,14 @@ export default function App() {
   const [lastOutAmount, setLastOutAmount] = useState(0);
   const [lastOutHours, setLastOutHours] = useState(0);
   const [costPerHour, setCostPerHour] = useState(0);
+  const isFocusMode = settings?.focusMode ?? false;
+  const [heatmapRange, setHeatmapRange] = useState<30 | 60 | 90>(30);
+  const [heatmapDays, setHeatmapDays] = useState<HeatmapDay[]>([]);
+  const [showAddObligationModal, setShowAddObligationModal] = useState(false);
+  const [newObligationName, setNewObligationName] = useState('');
+  const [newObligationAmountRaw, setNewObligationAmountRaw] = useState('');
+  const [newObligationPriority, setNewObligationPriority] = useState<1 | 2 | 3>(2);
+  const [newObligationError, setNewObligationError] = useState<string | null>(null);
 
   async function resetApp() {
     if (window.confirm("Reset all data and restart onboarding?")) {
@@ -150,13 +195,18 @@ export default function App() {
        const pending = obligations.filter((o) => o.totalAmount > 0 && o.cycles.length === 0).length;
       const txs = await db.transactions.toArray();
       const allZones = await db.zones.toArray();
-      const nonTransfer = txs.filter((tx) => !tx.tags?.includes('internal_transfer'));
-      const netIn = nonTransfer.filter((tx) => tx.direction === 'IN').reduce((sum, tx) => sum + tx.amount, 0);
-      const netOut = nonTransfer.filter((tx) => tx.direction === 'OUT').reduce((sum, tx) => sum + tx.amount, 0);
-      const net = netIn - netOut;
-      const target = activeQuest?.targetAmount ?? nextSettings?.selfReportedDebt ?? 0;
-      const progressAmount = Math.max(0, Math.min(net, target));
-      const progress = target > 0 ? Math.min(progressAmount / target, 1) : 0;
+       const nonTransfer = txs.filter((tx) => !tx.tags?.includes('internal_transfer'));
+       const netIn = nonTransfer.filter((tx) => tx.direction === 'IN').reduce((sum, tx) => sum + tx.amount, 0);
+       const netOut = nonTransfer.filter((tx) => tx.direction === 'OUT').reduce((sum, tx) => sum + tx.amount, 0);
+       const net = netIn - netOut;
+       const debtPrincipalIn = nonTransfer
+         .filter((tx) => tx.direction === 'IN' && tx.tags?.includes('debt_principal'))
+         .reduce((sum, tx) => sum + tx.amount, 0);
+       const earnedIn = netIn - debtPrincipalIn;
+       const earnedNet = earnedIn - netOut;
+       const target = activeQuest?.targetAmount ?? nextSettings?.selfReportedDebt ?? 0;
+       const progressAmount = Math.max(0, Math.min(earnedNet, target));
+       const progress = target > 0 ? Math.min(progressAmount / target, 1) : 0;
 
       const days: string[] = [];
       for (let i = 29; i >= 0; i -= 1) {
@@ -165,17 +215,39 @@ export default function App() {
       const dailyNet: Record<string, number> = {};
       for (const day of days) dailyNet[day] = 0;
       for (const tx of nonTransfer) {
-        if (dailyNet[tx.dateISO] !== undefined) {
-          dailyNet[tx.dateISO] += tx.direction === 'IN' ? tx.amount : -tx.amount;
+        const current = dailyNet[tx.dateISO];
+        if (current !== undefined) {
+          dailyNet[tx.dateISO] = current + (tx.direction === 'IN' ? tx.amount : -tx.amount);
         }
       }
       const netHistory = days.map((day) => dailyNet[day] ?? 0);
 
-      const currentMonth = nowISO.slice(0, 7);
-      const monthTxs = txs.filter((tx) => tx.dateISO.startsWith(currentMonth) && !tx.tags?.includes('internal_transfer'));
-      const inMonth = monthTxs.filter((tx) => tx.direction === 'IN').reduce((sum, tx) => sum + tx.amount, 0);
-      const outMonth = monthTxs.filter((tx) => tx.direction === 'OUT').reduce((sum, tx) => sum + tx.amount, 0);
-      const obligationsTotal = obligations.reduce((sum, obl) => sum + obl.totalAmount, 0);
+       const currentMonth = nowISO.slice(0, 7);
+       const monthTxs = txs.filter((tx) => tx.dateISO.startsWith(currentMonth) && !tx.tags?.includes('internal_transfer'));
+       const inMonth = monthTxs.filter((tx) => tx.direction === 'IN').reduce((sum, tx) => sum + tx.amount, 0);
+       const outMonth = monthTxs.filter((tx) => tx.direction === 'OUT').reduce((sum, tx) => sum + tx.amount, 0);
+       const spendMonth = monthTxs
+         .filter((tx) => tx.direction === 'OUT' && tx.categoryId !== 'cat_obligations')
+         .reduce((sum, tx) => sum + tx.amount, 0);
+       const obligationsTotal = obligations.reduce((sum, obl) => sum + obl.totalAmount, 0);
+
+       const heatmapWindow = 90;
+       const heatmapMap: Record<string, number> = {};
+       for (let i = heatmapWindow - 1; i >= 0; i -= 1) {
+         const day = addDaysISO(nowISO, -i);
+         heatmapMap[day] = 0;
+       }
+        for (const tx of nonTransfer) {
+          if (tx.direction !== 'OUT') continue;
+          if (tx.categoryId === 'cat_obligations') continue;
+          const current = heatmapMap[tx.dateISO];
+          if (current !== undefined) {
+            heatmapMap[tx.dateISO] = current + tx.amount;
+          }
+        }
+       const heatmap = Object.keys(heatmapMap)
+         .sort((a, b) => a.localeCompare(b))
+         .map((dateISO) => ({ dateISO, amount: heatmapMap[dateISO] ?? 0 }));
 
       const hourly = nextSettings?.monthlyIncome && nextSettings?.hoursPerWeek
         ? nextSettings.monthlyIncome / (nextSettings.hoursPerWeek * 4)
@@ -216,14 +288,15 @@ export default function App() {
         }
       }
 
-      return { rows, activeQuest, progress, progressAmount, target, net, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly };
-    }).subscribe(({ rows, activeQuest, progress, progressAmount, target, net, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly }) => {
+       return { rows, progress, progressAmount, target, net, earnedNet, debtPrincipalIn, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, spendMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly, heatmap };
+     }).subscribe(({ rows, progress, progressAmount, target, net, earnedNet, debtPrincipalIn, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, spendMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly, heatmap }) => {
       setDueRows(rows);
-      setQuest(activeQuest ?? null);
       setQuestProgress(progress);
       setQuestProgressAmount(progressAmount);
       setQuestTarget(target);
       setQuestNet(net);
+      setQuestEarnedNet(earnedNet);
+      setBorrowedPrincipal(debtPrincipalIn);
       setQuestNetIn(netIn);
       setQuestNetOut(netOut);
       setQuestNetHistory(netHistory);
@@ -231,6 +304,7 @@ export default function App() {
       setPendingObligationCount(pending);
       setMoneyInMonth(inMonth);
       setMoneyOutMonth(outMonth);
+      setSpendOutMonth(spendMonth);
       setObligationsRemaining(obligationsTotal);
       setZones(allZones);
       setZoneBalances(balances);
@@ -239,6 +313,7 @@ export default function App() {
       setLastOutAmount(lastOutValue);
       setLastOutHours(lastOutTime);
       setCostPerHour(hourly);
+      setHeatmapDays(heatmap);
     });
     return () => sub.unsubscribe();
   }, []);
@@ -294,6 +369,38 @@ export default function App() {
     }
   }
 
+  function resetNewObligationForm() {
+    setNewObligationName('');
+    setNewObligationAmountRaw('');
+    setNewObligationPriority(2);
+    setNewObligationError(null);
+  }
+
+  async function saveNewObligation() {
+    const name = newObligationName.trim();
+    const amount = Number(digitsOnly(newObligationAmountRaw));
+    if (!name) {
+      setNewObligationError('Enter an obligation name.');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setNewObligationError('Enter a valid amount.');
+      return;
+    }
+
+    setIsSaving(true);
+    setNewObligationError(null);
+    try {
+      await createObligation({ name, totalAmount: amount, priority: newObligationPriority });
+      setShowAddObligationModal(false);
+      resetNewObligationForm();
+    } catch (e) {
+      setNewObligationError(e instanceof Error ? e.message : 'Failed to add obligation.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   async function undoRecentActivities() {
     if (!recentActivities.length) return;
     setUndoError(null);
@@ -311,36 +418,8 @@ export default function App() {
     }
   }
 
-  const zoneNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-    zones.forEach((z) => {
-      map[z.id] = z.name;
-    });
-    return map;
-  }, [zones]);
-
-  function formatActivityTime(ts: number): string {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function activitySubtitle(activity: Activity): string {
-    if (activity.type === 'obligation_planned') {
-      return activity.meta?.obligationName ? `Plan · ${activity.meta.obligationName}` : 'Plan saved';
-    }
-    if (activity.type === 'confirmed_paid') {
-      return activity.meta?.obligationName ? `Paid · ${activity.meta.obligationName}` : 'Paid';
-    }
-    if (activity.type === 'transfer_created') {
-      const from = activity.meta?.fromZoneId ? zoneNameById[activity.meta.fromZoneId] : '';
-      const to = activity.meta?.toZoneId ? zoneNameById[activity.meta.toZoneId] : '';
-      if (from && to) return `${from} → ${to}`;
-      return 'Transfer';
-    }
-    if (activity.type === 'transaction_added') {
-      if (activity.meta?.note) return activity.meta.note;
-      return activity.direction === 'IN' ? 'Income' : 'Expense';
-    }
-    return '';
+  function formatActivityDate(ts: number): string {
+    return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   function activityTitle(activity: Activity): string {
@@ -355,6 +434,7 @@ export default function App() {
       if (id === 'cat_freelance') return 'Freelance';
       if (id === 'cat_gift') return 'Gift';
       if (id === 'cat_refund') return 'Refund';
+      if (id === 'cat_debt') return 'Borrowed';
       if (id === 'cat_obligations') return 'Obligations';
       return activity.title;
     }
@@ -371,12 +451,46 @@ export default function App() {
 
   function activityAmount(activity: Activity): string {
     if (!activity.amount) return '';
-    const sign = activity.direction === 'IN' ? '+' : activity.direction === 'OUT' ? '-' : '';
-    return `${sign}${formatNumberWithCommas(activity.amount)} VND`;
+    if (isFocusMode) return '****';
+    return `${formatMillions(activity.amount)} VND`;
   }
 
   const questRemaining = Math.max(0, (questTarget || 0) - questProgressAmount);
   const maxNetAbs = Math.max(1, ...questNetHistory.map((v) => Math.abs(v)));
+  const dailyCap = settings?.monthlyCap ? settings.monthlyCap / 30 : 0;
+  const heatmapSlice = heatmapDays.slice(-heatmapRange);
+  const heatmapStart = heatmapSlice[0]?.dateISO ?? '';
+  const heatmapEnd = heatmapSlice[heatmapSlice.length - 1]?.dateISO ?? '';
+  const heatmapCells = useMemo(() => {
+    const firstDay = heatmapSlice[0];
+    if (!firstDay) return [] as Array<HeatmapDay | null>;
+    const blanks = weekdayIndex(firstDay.dateISO);
+    const cells: Array<HeatmapDay | null> = [];
+    for (let i = 0; i < blanks; i += 1) cells.push(null);
+    heatmapSlice.forEach((day) => cells.push(day));
+    const remainder = cells.length % 7;
+    if (remainder !== 0) {
+      for (let i = 0; i < 7 - remainder; i += 1) cells.push(null);
+    }
+    return cells;
+  }, [heatmapSlice]);
+  const streak = dailyCap > 0
+    ? heatmapSlice.reduceRight((acc, day) => (day.amount <= dailyCap && acc !== -1 ? acc + 1 : -1), 0)
+    : 0;
+  const streakCount = streak === -1 ? 0 : streak;
+  const cap = settings?.monthlyCap ?? 0;
+  const capPercent = cap > 0 ? Math.min(100, Math.round((spendOutMonth / cap) * 100)) : 0;
+  const weeklyCap = cap > 0 ? cap / 4 : 0;
+  const last28 = heatmapDays.slice(-28);
+  const weeklySpends = [0, 0, 0, 0];
+  last28.forEach((day, idx) => {
+    const bucket = Math.floor(idx / 7);
+    if (bucket >= 0 && bucket < 4) {
+      weeklySpends[bucket] = (weeklySpends[bucket] ?? 0) + day.amount;
+    }
+  });
+  const weeklyPercents = weeklySpends.map((amt) => (weeklyCap > 0 ? Math.min(100, Math.round((amt / weeklyCap) * 100)) : 0));
+  const netPosition = questNet - obligationsRemaining;
 
   if (isLoading) {
     return (
@@ -400,7 +514,12 @@ export default function App() {
         </div>
         <div className="top-actions">
           <div className="pill">Month <span className="num">Feb 2026</span> ▼</div>
-          <div className="pill">Focus Mode</div>
+          <button
+            className={`pill ${isFocusMode ? 'primary' : ''}`}
+            onClick={() => setFocusMode(!isFocusMode)}
+          >
+            Focus Mode
+          </button>
           <button
             className="pill primary"
             onClick={() => {
@@ -488,7 +607,7 @@ export default function App() {
                       <div className="due-item-top">
                         <div>
                           <div className="due-label">{priorityLabel(row.obligation.priority)}</div>
-                          <div className="due-title">{row.obligation.name} — {formatCompactVND(row.cycle.amount)} VND</div>
+                           <div className="due-title">{row.obligation.name} — {formatVnd(row.cycle.amount, { compact: true, isFocus: isFocusMode })} {isFocusMode ? '' : 'VND'}</div>
                         </div>
                         <button className="icon-button" aria-label="Edit obligation">✎</button>
                       </div>
@@ -522,11 +641,11 @@ export default function App() {
               </div>
             </div>
 
-            {allObligations.length > 0 ? (
-              <div className="card stack-card">
-                <div className="row-title">Plan your obligations</div>
-                <div className="plan-list">
-                  {[...allObligations]
+            <div className="card stack-card">
+              <div className="row-title">Plan your obligations</div>
+              <div className="plan-list">
+                {allObligations.length ? (
+                  [...allObligations]
                     .sort((a, b) => b.totalAmount - a.totalAmount)
                     .map((obl) => {
                       const isPlanned = obl.cycles.length > 0;
@@ -535,7 +654,7 @@ export default function App() {
                           <div className="plan-item-left">
                             <div className="plan-item-name">{obl.name}</div>
                             <div className="plan-item-meta num">
-                              {formatNumberWithCommas(obl.totalAmount)} VND
+                              {formatVnd(obl.totalAmount, { isFocus: isFocusMode })} {isFocusMode ? '' : 'VND'}
                             </div>
                           </div>
                           <div className="plan-item-right">
@@ -545,15 +664,18 @@ export default function App() {
                           </div>
                         </div>
                       );
-                    })}
-                </div>
-                {pendingObligationCount > 0 ? (
-                  <div className="cta-row">
-                    <button className="pill primary" onClick={() => setShowObligationPlanner(true)}>Plan →</button>
-                  </div>
-                ) : null}
+                    })
+                ) : (
+                  <div className="small muted">No obligations yet. Add one to start planning.</div>
+                )}
               </div>
-            ) : null}
+              <button className="onboarding-add" onClick={() => setShowAddObligationModal(true)}>+ Add another</button>
+              {pendingObligationCount > 0 ? (
+                <div className="cta-row">
+                  <button className="pill primary" onClick={() => setShowObligationPlanner(true)}>Plan →</button>
+                </div>
+              ) : null}
+            </div>
 
             <div className="card stack-card inactive">
               <div className="row-title">Salary Day Run</div>
@@ -570,7 +692,11 @@ export default function App() {
               <div className="hero-content">
                 <div className="hero-label">Main Quest</div>
                 <div className="hero-title num">
-                  {questTarget > 0 ? formatCompactVND(questTarget) : '100M'} Recovery
+                  {questTarget > 0
+                    ? formatVnd(questTarget, { compact: true, isFocus: isFocusMode })
+                    : isFocusMode
+                      ? '****'
+                      : '100M'} Recovery
                 </div>
                 <p className="hero-subtitle">You are steadily climbing from your financial low point. Milestone 2 (75M) is 3M away.</p>
                 <button className="pill hero-button" onClick={() => setShowQuestDetails(true)}>View Details</button>
@@ -596,8 +722,14 @@ export default function App() {
                   />
                 </svg>
                   <div className="progress-ring-content">
-                    <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{formatCompactVND(questProgressAmount)}</span>
-                    <span className="small muted" style={{ fontSize: '16px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '6px' }}>OF {formatCompactVND(questTarget || 100_000_000)}</span>
+                    {isFocusMode ? (
+                      <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{percent}%</span>
+                    ) : (
+                      <>
+                        <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{formatVnd(questProgressAmount, { compact: true })}</span>
+                        <span className="small muted" style={{ fontSize: '16px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '6px' }}>OF {formatVnd(questTarget || 100_000_000, { compact: true })}</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -605,40 +737,78 @@ export default function App() {
 
             <div className="card">
               <div className="section-title">
-                <h2>Discipline Heatmap</h2>
-                <div className="heatmap-legend">
-                  <span style={{ background: '#ede9ff' }} />
-                  <span style={{ background: '#d8d0ff' }} />
-                  <span style={{ background: '#b7a7ff' }} />
-                  <span style={{ background: '#8f7bff' }} />
+                <div>
+                  <h2>Discipline Heatmap</h2>
+                  <div className="small muted">Streak: <span className="num">{streakCount}</span> days</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[30, 60, 90].map((range) => (
+                      <button
+                        key={range}
+                        className={`tab-pill ${heatmapRange === range ? 'active' : ''}`}
+                        onClick={() => setHeatmapRange(range as 30 | 60 | 90)}
+                        style={{ padding: '6px 12px', fontSize: 12 }}
+                      >
+                        {range}d
+                      </button>
+                    ))}
+                  </div>
+                  <div className="heatmap-legend">
+                    <span style={{ background: '#ede9ff' }} />
+                    <span style={{ background: '#d8d0ff' }} />
+                    <span style={{ background: '#b7a7ff' }} />
+                    <span style={{ background: '#8f7bff' }} />
+                    <span style={{ background: '#6b5bff' }} />
+                  </div>
                 </div>
               </div>
-              <div className="heatmap">
-                {Array.from({ length: 42 }).map((_, i) => {
-                  const colors = ['#ede9ff', '#d8d0ff', '#b7a7ff', '#8f7bff', '#6b5bff'];
-                  const level = (i * 3) % colors.length;
-                  return <span key={i} style={{ background: colors[level] }} />;
-                })}
-              </div>
-              <div className="heatmap-footer">
-                <span>6 WEEKS AGO</span>
-                <span>PRESENT</span>
+              <div className="heatmap-scroll">
+                <div className="heatmap-content">
+                  <div className="heatmap">
+                    {heatmapCells.map((day, idx) => {
+                      if (!day) return <span key={`blank-${idx}`} className="heatmap-empty" />;
+                      const colors = ['#ede9ff', '#d8d0ff', '#b7a7ff', '#8f7bff', '#6b5bff'];
+                      const level = heatmapLevel(day.amount, dailyCap);
+                      const title = isFocusMode
+                        ? `${day.dateISO}: ****`
+                        : dailyCap > 0
+                          ? `${day.dateISO}: ${formatNumberWithCommas(day.amount)} / ${formatNumberWithCommas(Math.round(dailyCap))} VND`
+                          : `${day.dateISO}: ${formatNumberWithCommas(day.amount)} VND`;
+                      return <span key={day.dateISO} style={{ background: colors[level] }} title={title} />;
+                    })}
+                  </div>
+                  <div className="heatmap-footer">
+                    <span>{heatmapStart ? heatmapStart : '...'}</span>
+                    <span>{heatmapEnd ? heatmapEnd : '...'}</span>
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="card">
               <div className="section-title">
                 <h2>Monthly Cap</h2>
-                <span className="small muted">78% used</span>
+                <span className="small muted" style={{ color: capPercent >= 100 ? '#ef4444' : capPercent >= 80 ? '#f59e0b' : undefined }}>
+                  {capPercent}% used
+                </span>
               </div>
               <div className="progress-bar" style={{ marginBottom: 12 }}>
-                <span style={{ width: '78%' }} />
+                <span style={{ width: `${capPercent}%` }} />
+              </div>
+              <div className="small muted" style={{ marginBottom: 10 }}>
+                {cap > 0 ? (
+                  <span className="num">
+                    {isFocusMode ? '**** / ****' : `${formatCompactVND(spendOutMonth)} / ${formatCompactVND(cap)} VND`}
+                  </span>
+                ) : (
+                  'Set a monthly cap to track usage.'
+                )}
               </div>
               <div className="mini-bars">
-                <div className="mini-bar" style={{ width: '42%' }} />
-                <div className="mini-bar" style={{ width: '30%' }} />
-                <div className="mini-bar" style={{ width: '18%' }} />
-                <div className="mini-bar" style={{ width: '12%' }} />
+                {weeklyPercents.map((pct, idx) => (
+                  <div key={idx} className="mini-bar" style={{ width: `${pct}%` }} />
+                ))}
               </div>
             </div>
           </section>
@@ -666,8 +836,8 @@ export default function App() {
                       ) : null}
                     </div>
                     <div className={`zone-amount num ${zone.tone}`}>
-                      {zone.sign ? <span className="zone-sign">{zone.sign}</span> : null}
-                      {formatNumberWithCommas(zone.amount)} <span className="zone-currency">VND</span>
+                      {!isFocusMode && zone.sign ? <span className="zone-sign">{zone.sign}</span> : null}
+                      {isFocusMode ? '****' : formatNumberWithCommas(zone.amount)} {isFocusMode ? null : <span className="zone-currency">VND</span>}
                     </div>
                   </div>
                 ))}
@@ -675,15 +845,17 @@ export default function App() {
             </div>
 
             <div className="card">
-              <div className="row-title" style={{ marginBottom: 16 }}>Last OUT</div>
+              <div className="row-title">Last OUT</div>
               {lastOutAmount > 0 ? (
                 <>
                   <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>
-                    {lastOutHours > 0 ? `≈ ${lastOutHours.toFixed(1)}h` : `${formatNumberWithCommas(lastOutAmount)} VND`}
+                    {lastOutHours > 0 ? `≈ ${lastOutHours.toFixed(1)}h` : `${formatVnd(lastOutAmount, { isFocus: isFocusMode })}${isFocusMode ? '' : ' VND'}`}
                   </div>
                   <div className="small muted">
                     {lastOutHours > 0
-                      ? `Based on your cost-per-hour (${formatNumberWithCommas(Math.round(costPerHour))} VND/h)`
+                      ? isFocusMode
+                        ? 'Based on your cost-per-hour'
+                        : `Based on your cost-per-hour (${formatNumberWithCommas(Math.round(costPerHour))} VND/h)`
                       : 'Set monthly income to see cost-per-hour'}
                   </div>
                 </>
@@ -713,9 +885,7 @@ export default function App() {
                       <div className="recent-action-body">
                         <div className="recent-action-title">{activityTitle(activity)}</div>
                         <div className="recent-action-meta">
-                          <span>{activitySubtitle(activity)}</span>
-                          <span>•</span>
-                          <span>{formatActivityTime(activity.createdAt)}</span>
+                          <span>{formatActivityDate(activity.createdAt)}</span>
                         </div>
                       </div>
                       <div className="recent-action-amount num">{activityAmount(activity)}</div>
@@ -754,13 +924,13 @@ export default function App() {
           <div className="card soft" style={{ marginBottom: 12 }}>
             <div className="small muted">Progress</div>
             <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>
-              {formatCompactVND(questProgressAmount)} out of {formatCompactVND(questTarget || 100_000_000)}
+              {formatVnd(questProgressAmount, { compact: true, isFocus: isFocusMode })} out of {formatVnd(questTarget || 100_000_000, { compact: true, isFocus: isFocusMode })}
             </div>
             <div className="small muted" style={{ marginTop: 4 }}>{percent}% complete</div>
           </div>
           <div className="card soft" style={{ marginBottom: 12 }}>
             <div className="small muted">Remaining to target</div>
-            <div className="num" style={{ fontSize: 18, fontWeight: 700 }}>{formatCompactVND(questRemaining)} VND</div>
+            <div className="num" style={{ fontSize: 18, fontWeight: 700 }}>{formatVnd(questRemaining, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
             <div className="small muted" style={{ marginTop: 6 }}>30-day net trend</div>
             <div className="quest-sparkline">
               {questNetHistory.map((value, idx) => {
@@ -772,25 +942,105 @@ export default function App() {
           </div>
           <div className="quest-details-grid">
             <div className="quest-detail">
-              <div className="small muted">Net (All Time)</div>
-              <div className="num" style={{ color: questNet < 0 ? '#ef4444' : '#10b981' }}>
-                {questNet < 0 ? '-' : '+'}{formatCompactVND(Math.abs(questNet))} VND
+              <div className="small muted">This Month</div>
+              <div className="num" style={{ color: moneyInMonth - moneyOutMonth < 0 ? '#ef4444' : '#10b981' }}>
+                {formatVnd(moneyInMonth - moneyOutMonth, { compact: true, isFocus: isFocusMode, showSign: true })}{isFocusMode ? '' : ' VND'}
               </div>
             </div>
             <div className="quest-detail">
-              <div className="small muted">This Month</div>
-              <div className="num" style={{ color: moneyInMonth - moneyOutMonth < 0 ? '#ef4444' : '#10b981' }}>
-                {moneyInMonth - moneyOutMonth < 0 ? '-' : '+'}{formatCompactVND(Math.abs(moneyInMonth - moneyOutMonth))} VND
+              <div className="small muted">Cashflow Net</div>
+              <div className="num" style={{ color: questNet < 0 ? '#ef4444' : '#10b981' }}>
+                {formatVnd(questNet, { compact: true, isFocus: isFocusMode, showSign: true })}{isFocusMode ? '' : ' VND'}
+              </div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">Earned Net</div>
+              <div className="num" style={{ color: questEarnedNet < 0 ? '#ef4444' : '#10b981' }}>
+                {formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode, showSign: true })}{isFocusMode ? '' : ' VND'}
+              </div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">Borrowed Principal</div>
+              <div className="num">{formatVnd(borrowedPrincipal, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">Debt Remaining</div>
+              <div className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
+            </div>
+            <div className="quest-detail">
+              <div className="small muted">Net Position</div>
+              <div className="num" style={{ color: netPosition < 0 ? '#ef4444' : '#10b981' }}>
+                {formatVnd(netPosition, { compact: true, isFocus: isFocusMode, showSign: true })}{isFocusMode ? '' : ' VND'}
               </div>
             </div>
             <div className="quest-detail">
               <div className="small muted">Total In</div>
-              <div className="num">{formatCompactVND(questNetIn)} VND</div>
+              <div className="num">{formatVnd(questNetIn, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
             </div>
             <div className="quest-detail">
               <div className="small muted">Total Out</div>
-              <div className="num">{formatCompactVND(questNetOut)} VND</div>
+              <div className="num">{formatVnd(questNetOut, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
             </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {showAddObligationModal ? (
+        <Modal
+          title="Add obligation"
+          description="Log who you owe and the remaining balance."
+          onClose={() => {
+            setShowAddObligationModal(false);
+            resetNewObligationForm();
+          }}
+        >
+          <div className="onboarding-section" style={{ marginBottom: 8 }}>
+            <div className="onboarding-field">
+              <label className="onboarding-label">Name / Who</label>
+              <input
+                className="onboarding-input-field"
+                placeholder="e.g., Student Loan"
+                value={newObligationName}
+                onChange={(e) => setNewObligationName(e.target.value)}
+              />
+            </div>
+            <div className="onboarding-field">
+              <label className="onboarding-label">Total Owed</label>
+              <div className="onboarding-input-icon">
+                <span className="onboarding-input-prefix">VND</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="onboarding-input-field num has-prefix"
+                  placeholder="5,000,000"
+                  value={newObligationAmountRaw ? formatNumberWithCommas(Number(newObligationAmountRaw)) : ''}
+                  onChange={(e) => setNewObligationAmountRaw(digitsOnly(e.target.value))}
+                />
+              </div>
+            </div>
+            <div className="onboarding-field">
+              <label className="onboarding-label">Priority</label>
+              <div className="obligation-priority">
+                {[1, 2, 3].map((p) => (
+                  <button
+                    key={p}
+                    className={`priority-button ${newObligationPriority === p ? 'active' : ''} p${p}`}
+                    onClick={() => setNewObligationPriority(p as 1 | 2 | 3)}
+                  >
+                    P{p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="small muted">Log new borrowed cash from the Receive tab if it happens today.</div>
+          </div>
+          {newObligationError ? <div className="onboarding-error">{newObligationError}</div> : null}
+          <div className="cta-row">
+            <button className="pill" onClick={() => {
+              setShowAddObligationModal(false);
+              resetNewObligationForm();
+            }}>Cancel</button>
+            <button className="pill primary" onClick={() => void saveNewObligation()} disabled={isSaving}>Add obligation</button>
           </div>
         </Modal>
       ) : null}

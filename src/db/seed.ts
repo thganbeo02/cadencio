@@ -8,6 +8,7 @@ const DEFAULT_CATEGORIES: Category[] = [
   { id: 'cat_health', name: 'Health', type: 'OUT', icon: '💊' },
   { id: 'cat_obligations', name: 'Obligations', type: 'OUT', icon: '📋' },
   { id: 'cat_salary', name: 'Salary', type: 'IN', icon: '💰', isFavorite: true },
+  { id: 'cat_debt', name: 'Borrowed', type: 'IN', icon: '🧾' },
   { id: 'cat_transfer', name: 'Transfer', type: 'OUT', icon: '🔁' },
   { id: 'cat_other', name: 'Other', type: 'OUT', icon: '📦' },
 ];

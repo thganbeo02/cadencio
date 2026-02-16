@@ -1,5 +1,77 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-13 17:20
+Last Updated: 2026-02-15 23:46
+
+================================================================================
+2026-02-15 - Debt Tracking, Focus Mode, Heatmap + Cap
+================================================================================
+
+FEATURE: Obligations Add Flow
+--------
+What Changed (Human):
+  - You can add obligations directly from the dashboard planning card
+  - Borrowed cash is logged from Receive → Borrowed to keep debt and cashflow distinct
+
+What Changed (Technical):
+  - Added dashboard Add Obligation modal with name/amount/priority
+  - Added Borrowed category to Receive and tagged it as debt_principal
+  - Quest progress now uses earned net (cashflow net minus borrowed principal)
+
+Files: src/App.tsx, src/components/TransactionModal.tsx, src/db/seed.ts, src/services/transactions.ts
+
+---
+
+FEATURE: Discipline Heatmap + Monthly Cap
+--------
+What Changed (Human):
+  - Heatmap now reflects real spending in a scrollable GitHub-style grid
+  - Monthly cap now shows live usage with weekly mini bars
+
+What Changed (Technical):
+  - Added day-level spend aggregation and rolling 30/60/90-day heatmap windows
+  - Calculated streaks and cap usage from real OUT transactions
+
+Files: src/App.tsx, src/index.css
+
+---
+
+FEATURE: Focus Mode Masking
+--------
+What Changed (Human):
+  - Money values are hidden with asterisks across passive screens
+  - Quest ring shows a percent-only completion readout in Focus Mode
+
+What Changed (Technical):
+  - Added focus-mode formatting helpers for amounts
+  - Replaced quest ring values with percent when focusMode is enabled
+
+Files: src/App.tsx
+
+---
+
+FEATURE: Recent Actions Scanline
+--------
+What Changed (Human):
+  - Recent Actions now shows date-only and compact M-format amounts
+
+What Changed (Technical):
+  - Added M-format helper and adjusted activity meta rendering
+
+Files: src/App.tsx
+
+---
+
+FEATURE: Tooling Hygiene
+--------
+What Changed (Human):
+  - Release notes are now split into a weekly draft and a curated patch format
+
+What Changed (Technical):
+  - Ignored build output in ESLint configuration
+  - Cleaned unused symbols and tightened type guards for indexing
+  - Added a frozen weekly draft patch note file alongside curated notes
+
+Files: eslint.config.js, src/App.tsx, src/components/TransactionModal.tsx, src/services/activities.ts,
+       docs/patch-notes/UNRELEASED-0.0.1.md, docs/patch-notes/0.0.1.md
 
 ================================================================================
 2026-02-13 - UX Fixes, Activity Log, Quest Progress

@@ -1,5 +1,36 @@
 # Cadencio - Daily Development Log
 
+## 2026-02-15 - Sunday
+
+**Goal**: Align cashflow vs. debt tracking, and implement real heatmap/cap analytics
+
+**Completed**:
+- ✅ Removed the Obligation tab from Universal Add to keep the quick add flow focused.
+- ✅ Added an "Add obligation" modal from the planning card (name, amount, priority).
+- ✅ Added a Borrowed receive category with `debt_principal` tagging.
+- ✅ Updated quest progress to use earned net (cashflow net minus borrowed principal).
+- ✅ Implemented real Discipline Heatmap with 30/60/90-day ranges and streaks.
+- ✅ Implemented real Monthly Cap usage + weekly mini bars.
+- ✅ Added Focus Mode masking for money values with a percent-only quest ring.
+- ✅ Simplified Recent Actions to show month/day dates and M-format amounts.
+- ✅ Tightened Last OUT spacing in the dashboard.
+- ✅ Updated ESLint config to ignore build output and cleaned unused symbols.
+- ✅ Split release notes into a weekly draft and curated patch format.
+- ✅ Updated project spec to reflect earned net quest logic and double-entry transfers.
+
+**Blockers**: None
+
+**Next Steps**:
+- Wire Focus Mode masking across the dashboard
+- Implement Salary Day Run checklist logic
+- Add obligation priority sorting in the planner flow
+
+**Stats**: Files: 14 | +~520 -~210 | Deps: none
+
+**Notes**: Borrowed principal now shows separately so the ring stays honest while cash inflows are still recorded.
+
+---
+
 ## 2026-02-13 - Friday
 
 **Goal**: Fix onboarding UX bugs, stabilize planning, and wire activity/quest tracking

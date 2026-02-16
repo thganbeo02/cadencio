@@ -1,9 +1,10 @@
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { createTransaction } from '../services/transactions';
 import type { TransactionDirection } from '../types';
 
-type Tab = 'spend' | 'receive' | 'obligation';
+type Tab = 'spend' | 'receive';
 
 type CategoryOption = {
   id: string;
@@ -24,11 +25,10 @@ const RECEIVE_CATEGORIES: CategoryOption[] = [
   { id: 'cat_freelance', name: 'Freelance', direction: 'IN' },
   { id: 'cat_gift', name: 'Gift', direction: 'IN' },
   { id: 'cat_refund', name: 'Refund', direction: 'IN' },
+  { id: 'cat_debt', name: 'Borrowed', direction: 'IN' },
 ];
 
-const OBLIGATION_CATEGORY: CategoryOption = { id: 'cat_obligations', name: 'Obligation', direction: 'OUT' };
-
-const CATEGORY_ICONS: Record<string, JSX.Element> = {
+const CATEGORY_ICONS: Record<string, ReactNode> = {
   cat_food: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M4 3v7a4 4 0 0 0 4 4v7" />
@@ -101,6 +101,14 @@ const CATEGORY_ICONS: Record<string, JSX.Element> = {
       <path d="M21 21v-6h-6" />
     </svg>
   ),
+  cat_debt: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 2h8l4 4v16H6z" />
+      <path d="M14 2v4h4" />
+      <path d="M9 13h6" />
+      <path d="M9 17h6" />
+    </svg>
+  ),
   cat_obligations: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M6 2h8l4 4v16H6z" />
@@ -142,11 +150,7 @@ export function TransactionModal({
 
   const displayAmount = amountRaw ? formatNumberWithCommas(Number(amountRaw)) : '';
 
-  const categories = tab === 'spend'
-    ? SPEND_CATEGORIES
-    : tab === 'receive'
-      ? RECEIVE_CATEGORIES
-      : [OBLIGATION_CATEGORY];
+  const categories = tab === 'spend' ? SPEND_CATEGORIES : RECEIVE_CATEGORIES;
 
   const activeCategoryId = categoryId ?? categories[0]?.id ?? null;
   const activeDirection: TransactionDirection = tab === 'receive' ? 'IN' : 'OUT';
@@ -166,6 +170,7 @@ export function TransactionModal({
         direction: activeDirection,
         categoryId: activeCategoryId,
         note: note.trim() ? note.trim() : undefined,
+        tags: activeCategoryId === 'cat_debt' ? ['debt_principal'] : undefined,
       });
       onClose();
     } catch (e) {
@@ -178,7 +183,7 @@ export function TransactionModal({
   return (
     <Modal
       title="Add transaction"
-      description="Quickly log spend, income, or obligation payments."
+      description="Quickly log spend or income."
       onClose={onClose}
       cardClassName="transaction-card"
       titleClassName="onboarding-title"
@@ -188,7 +193,6 @@ export function TransactionModal({
         <div className="transaction-tabs">
           <button className={`tab-pill ${tab === 'spend' ? 'active' : ''}`} onClick={() => setTab('spend')}>Spend</button>
           <button className={`tab-pill ${tab === 'receive' ? 'active' : ''}`} onClick={() => setTab('receive')}>Receive</button>
-          <button className={`tab-pill ${tab === 'obligation' ? 'active' : ''}`} onClick={() => setTab('obligation')}>Obligation</button>
         </div>
 
         <div className="transaction-amount">

@@ -21,7 +21,8 @@ The app NEVER initiates real-world transactions. Every payment/transfer is:
 The app never asks for bank account balances, account numbers, or login credentials. All financial data is **self-reported**: what you owe, what you earn, what you spend. The system tracks actions and progress, not account states.
 
 ### Universal Add is the "one door"
-90% of interactions must be possible with **one button** (Spend / Receive / Obligation).
+90% of interactions must be possible with **one button** (Spend / Receive).
+Obligations are added from the "Plan your obligations" panel so they stay in context.
 
 ### Review & Confirm always
 Anything auto-generated (AI parse, templates, salary runbook) must go through **Review & Confirm** before saving.
@@ -46,7 +47,7 @@ Anything auto-generated (AI parse, templates, salary runbook) must go through **
 ### Core Mechanics
 
 - **Discipline Heatmap (GitHub-style)**: Green days = under budget. Streaks tracked and celebrated.
-- **Main Quest** (user-selected): Three tiered recovery targets based on self-reported debt. Quest progress is transaction-derived — every Confirm Paid and logged savings transfer advances the ring.
+- **Main Quest** (user-selected): Three tiered recovery targets based on self-reported debt. Quest progress is earned cashflow (cashflow net minus borrowed principal).
 - **Salary Day Run**: Quest checklist appears on reset day (±2 days). Guided flow for allocating income to obligations.
 - **Cost-Per-Hour Pain Meter**: Converts spending into "hours of work" based on `monthlyIncome ÷ 40` (adjustable in Settings).
 - **Friction Screen**: Pause before each spend — categorize as **Need** or **Growth**. Provides conscious decision-making without a delay queue.
@@ -159,8 +160,10 @@ Settings {
 costPerHour = monthlyIncome / (hoursPerWeek / 5 * 20)  // simplified: monthlyIncome / 40 at default
 dailyCap = monthlyCap / 30
 
-questProgress = sum of all confirmed obligation payments (OUT transactions tagged 'confirmed' + 'obligation_payment')
-              + sum of all logged savings transfers (OUT transactions tagged 'transfer' to savings/emergency zones)
+cashflowNet = sum(IN) - sum(OUT) for all non-transfer transactions
+borrowedPrincipal = sum(IN tagged 'debt_principal')
+earnedNet = cashflowNet - borrowedPrincipal
+questProgress = clamp(earnedNet, 0..questTarget)
 ```
 
 ### Phase 2 additions
@@ -189,16 +192,17 @@ IncomeExpectation {
 - Salary Day window: `salaryDay - 2` through `salaryDay + 3` **inclusive** (local time).
 - Missed income logic (Phase 2): expectedDate + 3 days grace.
 
-### 5.2 Quest Progress Rules (Transaction-Derived)
-- Quest progress = sum of all confirmed obligation payments + logged savings transfers.
-- No snapshots or bank balances required. Progress comes from **confirmed actions within the app**.
+### 5.2 Quest Progress Rules (Cashflow-Derived)
+- Quest progress = clamp(earned net cashflow, 0..quest target).
+- Earned net = cashflow net (IN − OUT) excluding internal transfers and borrowed principal.
+- Borrowed principal is tagged `debt_principal` so it can be reported separately.
 - Quest target is set during onboarding (user-selected from three tiers).
 - User can change quest target anytime in Settings.
 - Three quest tiers are calculated by the **Obligation Suggestion Algorithm** (see separate doc) based on self-reported debt, monthly income, spend cap, and obligation load.
 
 ### 5.3 Zone Transfer Logging (MVP)
-- Single-entry transfer: 1 OUT transaction tagged `transfer`, with `meta.fromZoneId` and `meta.toZoneId`.
-- No double-entry accounting in MVP. Optional Phase 3 upgrade.
+- Double-entry internal transfer: 1 OUT + 1 IN transaction, both tagged `internal_transfer` with `meta.fromZoneId` and `meta.toZoneId`.
+- Transfers never affect quest progress or spending analytics.
 
 ### 5.4 Focus Mode
 When Focus Mode is ON:
@@ -249,7 +253,7 @@ When Friction is ON:
 
 3. **Main Quest Card** (user-selected quest name + progress %)
 
-4. **Discipline Heatmap** (last 6 weeks) + streak counter
+4. **Discipline Heatmap** (30/60/90-day views) + streak counter
 
 5. **Monthly Budget Usage** (progress bar showing % of monthly cap, auto-calculated daily equivalent)
 
@@ -263,9 +267,9 @@ When Friction is ON:
 
 ### 7.2 Universal Add Modal (MVP centerpiece)
 
-**3 tabs** (MVP): Spend (OUT) · Receive (IN) · Obligation
+**2 tabs** (MVP): Spend (OUT) · Receive (IN)
 
-**Phase 1.5+**: Add Paste (AI Parse) as 4th tab.
+**Phase 1.5+**: Add Paste (AI Parse) as 3rd tab.
 
 **Performance**: Opens in <200ms. Keyboard shortcuts: Cmd+N (Spend), Cmd+R (Receive).
 
@@ -281,6 +285,8 @@ When Friction is ON:
 
 ### 7.5 Obligations Screen
 **Tabs**: Upcoming (priority → date) · Paid (recent first) · Overdue (auto-flagged)
+
+**Note**: Adding an obligation only updates debt; log any borrowed cash separately in Receive → Borrowed.
 
 **Card**: Name, priority badge (P1 red "CRITICAL", P2 orange "HIGH", P3 gray "STANDARD"), countdown chip, "Confirm Paid" button. Amount visible only when Focus Mode is OFF.
 
@@ -507,7 +513,7 @@ Server-side Zod validation. Reject malformed outputs.
 
 ### Phase 1 — MVP (2–4 weeks, ship fast, daily usable)
 - Dashboard (Next Actions + Status + Heatmap + Quest card)
-- Universal Add Modal (Spend/Receive/Obligation)
+- Universal Add Modal (Spend/Receive)
 - Onboarding modal (5 screens) + obligation scheduling flow with suggestion algorithm
 - Obligations cycles + Confirm Paid (auto-OUT + quest progress)
 - Budgets: monthly cap + warnings
@@ -627,7 +633,7 @@ Deploy: Client to CDN, Server to VPS/Railway/Fly.io.
 ## 16) Key Architectural Decisions
 
 - ✅ No bank balances — all data is self-reported
-- ✅ Quest progress is transaction-derived (confirmed payments + savings transfers)
+- ✅ Quest progress is cashflow-derived (earned net excludes borrowed principal)
 - ✅ Keep Vite (don't migrate to Next.js for Phase 1–2)
 - ✅ Confirm Paid auto-creates OUT transaction
 - ✅ Universal Add Modal is the centerpiece
@@ -637,7 +643,7 @@ Deploy: Client to CDN, Server to VPS/Railway/Fly.io.
 - ✅ Focus Mode exempts active input screens (scheduling, settings)
 - ✅ Obligation scheduling is post-onboarding with suggestion algorithm
 - ✅ AI parse only through backend/serverless, never client-side keys (Phase 1.5+)
-- ✅ Single-entry zone transfers in MVP (no double-entry accounting)
+- ✅ Double-entry zone transfers in MVP (OUT + IN, tagged `internal_transfer`)
 - ✅ Expected Income in Phase 2 completes the manual-confirm loop
 
 ---

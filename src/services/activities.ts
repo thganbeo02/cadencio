@@ -1,5 +1,5 @@
 import { db } from '../db/database';
-import type { Activity, ActivityType, ActivityUndo } from '../types';
+import type { Activity, ActivityUndo } from '../types';
 import { makeId } from '../utils/id';
 
 export type ActivityInput = Omit<Activity, 'id' | 'createdAt'> & { createdAt?: number };
