@@ -63,6 +63,10 @@ export interface Quest {
   name: string;
   targetAmount: number;
   createdAt: number;
+  kind?: 'debt_cut' | 'earned_climb' | 'recovery_map';
+  tier?: 1 | 2 | 3;
+  baselineAmount?: number;
+  shadowDebt?: number;
 }
 
 export interface Settings {

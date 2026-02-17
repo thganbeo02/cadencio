@@ -1,5 +1,28 @@
 # Cadencio - Daily Development Log
 
+## 2026-02-17 - Tuesday
+
+**Goal**: Rework Main Quest selection into creative quest types + tiered difficulty, and tighten dashboard clarity.
+
+**Completed**:
+- ✅ Rebuilt Onboarding Step 5 quest selection into 3 tabs (Debt Cut / Earned Climb / Recovery Map) with 1★/2★/3★ tiers.
+- ✅ Debt Cut now targets “debt cleared” (ascending goals) and dashboard progress matches.
+- ✅ Recovery Map now scales targets by surplus (1/3/6 month buffers) and no longer starts with “free progress” (shadow debt accounted for).
+- ✅ Simplified Step 5 by removing the briefing panel; cards carry the explanation; missing inputs show a red estimate warning.
+- ✅ Step 3 “Total Obligations” only appears after the user begins entering amounts.
+- ✅ Replaced “Undo listed” and Zone “Transfer” pills with simple clickable text.
+- ✅ Added gentle info icons that open breakdown modals for Main Quest, Heatmap, and Monthly Cap.
+- ✅ Fixed white-screen issues (missing imports / stray JSX / missing state).
+
+**Blockers**: None
+
+**Next Steps**:
+- Stabilize hero quest card layout rules (ring sizing + containment) without theme drift.
+- Decide XP/reputation design for “new obligations mid-quest” and write a spec section + UI surfaces (badges/side quests).
+
+---
+
+
 ## 2026-02-15 - Sunday
 
 **Goal**: Align cashflow vs. debt tracking, and implement real heatmap/cap analytics

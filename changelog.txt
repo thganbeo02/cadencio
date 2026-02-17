@@ -1,5 +1,25 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-15 23:46
+Last Updated: 2026-02-17 18:05
+
+================================================================================
+2026-02-17 - Quest Modes & Quest Clarity
+================================================================================
+
+FEATURE: Quest Modes & Tiered Selection
+--------
+What Changed (Human):
+  - Main Quest selection now offers Debt Cut, Earned Climb, and Recovery Map with clear difficulty tiers
+  - Quest math no longer starts with phantom progress when unlisted debt exists
+  - Dashboard labels and info cues help explain what counts toward progress
+
+What Changed (Technical):
+  - Added quest kind/tier/baseline/shadow debt support and updated progress calculations by quest type
+  - Added info modals for Main Quest, Discipline Heatmap, and Monthly Cap
+  - Simplified onboarding Step 5 quest UI and added estimate warnings when inputs are missing
+
+Files: src/components/OnboardingModal.tsx, src/App.tsx, src/index.css, src/types/index.ts
+
+---
 
 ================================================================================
 2026-02-15 - Debt Tracking, Focus Mode, Heatmap + Cap

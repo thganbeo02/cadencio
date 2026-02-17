@@ -492,6 +492,12 @@ Server-side Zod validation. Reject malformed outputs.
 
 ## 11) Future Roadmap (High-Impact Implementations)
 
+### Reliability XP + Reputation Layer
+- **Behavior-Driven XP**: Award XP for on-time obligation payments, planning new obligations quickly, and staying under cap.
+- **Shock Bonus Pools**: When new obligations are added mid-quest, create a limited-time XP pool that rewards staying on schedule.
+- **Recalibration Choice**: Offer a "keep contract" option (higher XP multiplier) vs "recalibrate quest" (normal XP).
+- **Anti-Gaming Rules**: Cap multipliers, require at least one payment on new obligations, and ignore transfers.
+
 ### AI Copilot for Complex Planning
 - **Natural Language Input**: Allows users to describe complex multi-phase schedules (e.g., "Pay 20M/mo for 3 months, then 10M/mo until finished").
 - **Intent-Driven Suggestions**: Chips for "Faster Payoff," "Lower Monthly," or "Best Balance" that instantly re-calculate the entire schedule.

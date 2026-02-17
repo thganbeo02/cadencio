@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db } from '../db/database';
 import { useAppStore } from '../stores/useAppStore';
 import type { ObligationPriority } from '../types';
@@ -40,6 +40,9 @@ type DraftObligation = {
   priority: ObligationPriority;
 };
 
+type QuestKind = 'debt_cut' | 'earned_climb' | 'recovery_map';
+type QuestTier = 1 | 2 | 3;
+
 const DEFAULT_INCOME = 10_000_000;
 const DEFAULT_CAP = 15_000_000;
 const DEFAULT_OBLIGATION = 1_000_000;
@@ -59,7 +62,8 @@ export function OnboardingModal() {
   ]);
 
   const [selfDebtRaw, setSelfDebtRaw] = useState('');
-  const [selectedTier, setSelectedTier] = useState<1 | 2 | 3 | null>(null);
+  const [activeQuestKind, setActiveQuestKind] = useState<QuestKind>('earned_climb');
+  const [selectedQuest, setSelectedQuest] = useState<{ kind: QuestKind; tier: QuestTier } | null>(null);
 
   const income = useMemo(() => {
     const n = Number(incomeRaw);
@@ -91,6 +95,10 @@ export function OnboardingModal() {
       .filter((d) => d.name.length > 0);
   }, [drafts]);
 
+  const hasObligationAmount = useMemo(() => {
+    return drafts.some((d) => digitsOnly(d.amountRaw).length > 0);
+  }, [drafts]);
+
   const obligationsSum = cleanedObligations.reduce((sum, o) => sum + (o.amount || DEFAULT_OBLIGATION), 0);
   const smallestObligation = cleanedObligations.length
     ? Math.min(...cleanedObligations.map((o) => o.amount || DEFAULT_OBLIGATION))
@@ -101,22 +109,152 @@ export function OnboardingModal() {
     return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
   }, [selfDebtRaw]);
 
-  const tiers = useMemo(() => {
-    if (selfDebt > 0) {
-      const tier2 = selfDebt;
-      const tier3 = selfDebt + 100_000_000;
-      const baseTier1 = smallestObligation > 0 ? smallestObligation + 5_000_000 : 30_000_000;
-      const tier1 = Math.min(Math.max(30_000_000, baseTier1), tier2);
-      return { tier1, tier2, tier3 };
-    }
+  const questOptions = useMemo(() => {
+    const effectiveIncome = income > 0 ? income : DEFAULT_INCOME;
+    const effectiveCap = cap > 0 ? cap : DEFAULT_CAP;
+    const surplus = Math.max(0, effectiveIncome - effectiveCap);
+    const safeSurplus = Math.max(1_000_000, surplus);
 
-    const baseline = cap > 0 ? cap : DEFAULT_CAP;
+    const baseDebt = Math.max(obligationsSum, DEFAULT_OBLIGATION);
+    const debtTier1 = Math.max(0, Math.round(baseDebt * 0.2));
+    const debtTier2 = Math.max(0, Math.round(baseDebt * 0.5));
+    const debtTier3 = baseDebt;
+
+    const earnedTier1 = safeSurplus * 1;
+    const earnedTier2 = safeSurplus * 3;
+    const earnedTier3 = safeSurplus * 6;
+
+    const recoveryBaseDebt = Math.max(selfDebt || 0, obligationsSum, DEFAULT_OBLIGATION);
+    const recoveryTier1 = recoveryBaseDebt + safeSurplus * 1;
+    const recoveryTier2 = recoveryBaseDebt + safeSurplus * 3;
+    const recoveryTier3 = recoveryBaseDebt + safeSurplus * 6;
+
+    const canEstimate = income > 0 && cap > 0 && income > cap;
+    const estimateMonths = (target: number) => (canEstimate ? Math.max(1, Math.ceil(target / safeSurplus)) : undefined);
+
     return {
-      tier1: baseline * 3,
-      tier2: baseline * 6,
-      tier3: baseline * 12,
+      debt_cut: [
+        {
+          kind: 'debt_cut' as const,
+          tier: 1 as const,
+          title: 'First Cut',
+          subtitle: 'Shrink what you owe fast',
+          targetAmount: debtTier1,
+          targetLabel: 'Target debt cleared',
+          ruleTag: 'Debt Only',
+          description: 'Progress only moves when you confirm obligation payments.',
+          etaMonths: estimateMonths(debtTier1),
+        },
+        {
+          kind: 'debt_cut' as const,
+          tier: 2 as const,
+          title: 'Half the Monster',
+          subtitle: 'Cut total debt in half',
+          targetAmount: debtTier2,
+          targetLabel: 'Target debt cleared',
+          ruleTag: 'Debt Only',
+          description: 'A medium-length grind focused on pure debt reduction.',
+          etaMonths: estimateMonths(debtTier2),
+        },
+        {
+          kind: 'debt_cut' as const,
+          tier: 3 as const,
+          title: 'Debt Zero',
+          subtitle: 'Close every obligation fully',
+          targetAmount: debtTier3,
+          targetLabel: 'Target debt cleared',
+          ruleTag: 'Debt Only',
+          description: 'Finish the loop completely. No obligations left standing.',
+          etaMonths: estimateMonths(debtTier3),
+        },
+      ],
+      earned_climb: [
+        {
+          kind: 'earned_climb' as const,
+          tier: 1 as const,
+          title: 'Surplus Month',
+          subtitle: 'Prove one strong month of earned net',
+          targetAmount: earnedTier1,
+          targetLabel: 'Target earned net',
+          ruleTag: 'Earned Net',
+          description: 'Borrowed cash never advances this ring.',
+          etaMonths: estimateMonths(earnedTier1),
+        },
+        {
+          kind: 'earned_climb' as const,
+          tier: 2 as const,
+          title: 'Quarter-Year',
+          subtitle: 'Three months of surplus momentum',
+          targetAmount: earnedTier2,
+          targetLabel: 'Target earned net',
+          ruleTag: 'Earned Net',
+          description: 'A balanced climb that rewards consistency.',
+          etaMonths: estimateMonths(earnedTier2),
+        },
+        {
+          kind: 'earned_climb' as const,
+          tier: 3 as const,
+          title: 'Half-Year',
+          subtitle: 'Six months of surplus earned',
+          targetAmount: earnedTier3,
+          targetLabel: 'Target earned net',
+          ruleTag: 'Earned Net',
+          description: 'A serious commitment to sustained surplus.',
+          etaMonths: estimateMonths(earnedTier3),
+        },
+      ],
+      recovery_map: [
+        {
+          kind: 'recovery_map' as const,
+          tier: 1 as const,
+          title: 'Break Even',
+          subtitle: 'Debt cleared on paper, clean slate',
+          targetAmount: recoveryTier1,
+          targetLabel: 'Target recovery score',
+          ruleTag: 'Full Map',
+          description: 'Score rises with earned net and debt cleared.',
+          etaMonths: estimateMonths(recoveryTier1),
+        },
+        {
+          kind: 'recovery_map' as const,
+          tier: 2 as const,
+          title: 'Safe Ground',
+          subtitle: 'Debt cleared plus 3 month buffer',
+          targetAmount: recoveryTier2,
+          targetLabel: 'Target recovery score',
+          ruleTag: 'Full Map',
+          description: 'Add a safety buffer after clearing the debt line.',
+          etaMonths: estimateMonths(recoveryTier2),
+        },
+        {
+          kind: 'recovery_map' as const,
+          tier: 3 as const,
+          title: 'Shielded',
+          subtitle: 'Debt cleared plus 6 month runway',
+          targetAmount: recoveryTier3,
+          targetLabel: 'Target recovery score',
+          ruleTag: 'Full Map',
+          description: 'Aim for stability beyond recovery.',
+          etaMonths: estimateMonths(recoveryTier3),
+        },
+      ],
+      metadata: {
+        baseDebt,
+        recoveryBaseDebt,
+        shadowDebt: Math.max(0, (selfDebt || 0) - obligationsSum),
+        effectiveCap,
+        canEstimate,
+      },
     };
-  }, [selfDebt, cap, smallestObligation]);
+  }, [cap, income, obligationsSum, selfDebt]);
+
+  useEffect(() => {
+    if (step !== 5) return;
+    setSelectedQuest((current) => {
+      if (current?.kind === activeQuestKind) return current;
+      return { kind: activeQuestKind, tier: 2 };
+    });
+  }, [activeQuestKind, step]);
 
   async function saveStep1(skip: boolean) {
     if (!settings) return;
@@ -157,14 +295,37 @@ export function OnboardingModal() {
 
   async function saveStep5() {
     if (!settings) return;
-    if (!selectedTier) throw new Error('Pick a quest to continue.');
+    if (!selectedQuest) throw new Error('Pick a quest to continue.');
 
-    const targetAmount = selectedTier === 1 ? tiers.tier1 : selectedTier === 2 ? tiers.tier2 : tiers.tier3;
-    const name = selectedTier === 1 ? 'First Shield' : selectedTier === 2 ? 'The Reckoning' : "Cadencio's Ambition";
+    const options = questOptions[selectedQuest.kind];
+    const selectedOption = options.find((opt) => opt.tier === selectedQuest.tier);
+    if (!selectedOption) throw new Error('Pick a quest to continue.');
+
+    const modeLabel = selectedQuest.kind === 'debt_cut'
+      ? 'Debt Cut'
+      : selectedQuest.kind === 'earned_climb'
+        ? 'Earned Climb'
+        : 'Recovery Map';
+    const name = `${modeLabel}: ${selectedOption.title}`;
+    const baselineAmount = selectedQuest.kind === 'debt_cut'
+      ? questOptions.metadata.baseDebt
+      : selectedQuest.kind === 'recovery_map'
+        ? questOptions.metadata.recoveryBaseDebt
+        : 0;
+    const shadowDebt = selectedQuest.kind === 'recovery_map' ? questOptions.metadata.shadowDebt : 0;
     const questId = makeId('quest');
 
     await db.transaction('rw', db.quests, db.settings, async () => {
-      await db.quests.add({ id: questId, name, targetAmount, createdAt: Date.now() });
+      await db.quests.add({
+        id: questId,
+        name,
+        targetAmount: selectedOption.targetAmount,
+        createdAt: Date.now(),
+        kind: selectedQuest.kind,
+        tier: selectedQuest.tier,
+        baselineAmount,
+        shadowDebt,
+      });
       await db.settings.update('settings', { activeQuestId: questId, onboardingCompletedAt: Date.now() });
     });
   }
@@ -226,6 +387,14 @@ export function OnboardingModal() {
   }
 
   if (!settings) return null;
+
+  const questTabs: Array<{ kind: QuestKind; label: string; hint: string }> = [
+    { kind: 'debt_cut', label: 'Debt Cut', hint: 'Reduce what you owe' },
+    { kind: 'earned_climb', label: 'Earned Climb', hint: 'Build earned net' },
+    { kind: 'recovery_map', label: 'Recovery Map', hint: 'Debt + surplus journey' },
+  ];
+
+  const activeOptions = questOptions[activeQuestKind];
 
   return (
     <div className="onboarding-overlay">
@@ -525,52 +694,70 @@ export function OnboardingModal() {
               </div>
 
               <div className="onboarding-section">
-                <div className="onboarding-quest-grid">
-                  {[1, 2, 3].map((tier) => (
+                <div className="quest-tabs">
+                  {questTabs.map((tab) => (
                     <button
-                      key={tier}
-                      className={`onboarding-quest-card ${selectedTier === tier ? 'active' : ''}`}
-                      onClick={() => setSelectedTier(tier as 1 | 2 | 3)}
+                      key={tab.kind}
+                      className={`tab-pill ${activeQuestKind === tab.kind ? 'active' : ''}`}
+                      onClick={() => setActiveQuestKind(tab.kind)}
                     >
-                      {tier === 2 ? <div className="quest-badge">Recommended</div> : null}
-                      <div className="quest-icon">
-                        {tier === 1 ? (
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-                          </svg>
-                        ) : tier === 2 ? (
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <circle cx="12" cy="12" r="10" />
-                            <circle cx="12" cy="12" r="6" />
-                            <circle cx="12" cy="12" r="2" />
-                          </svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
-                            <path d="M5 21h14" />
-                          </svg>
-                        )}
-                      </div>
-                      <h3>{tier === 1 ? 'First Shield' : tier === 2 ? 'The Reckoning' : "Cadencio's Ambition"}</h3>
-                      <p>
-                        {tier === 1
-                          ? 'Build your emergency fund foundation'
-                          : tier === 2
-                            ? 'Tackle your highest-priority debt'
-                            : 'Complete financial independence'}
-                      </p>
-                      <div className="quest-meta">
-                        <div>
-                          <span>Target</span>
-                          <strong>{formatCompactVND(tier === 1 ? tiers.tier1 : tier === 2 ? tiers.tier2 : tiers.tier3)} VND</strong>
-                        </div>
-                        <div>
-                          <span>Est. Timeline</span>
-                          <strong>{tier === 1 ? '3 months' : tier === 2 ? '8 months' : '18 months'}</strong>
-                        </div>
-                      </div>
+                      <span>{tab.label}</span>
+                      <span className="quest-tab-hint">{tab.hint}</span>
                     </button>
                   ))}
+                </div>
+
+                <div className="onboarding-quest-grid">
+                  {activeOptions.map((option) => {
+                    const isSelected = selectedQuest?.kind === option.kind && selectedQuest?.tier === option.tier;
+                    const stars = `${'★'.repeat(option.tier)}${'☆'.repeat(3 - option.tier)}`;
+                    return (
+                      <button
+                        key={`${option.kind}-${option.tier}`}
+                        className={`onboarding-quest-card ${isSelected ? 'active' : ''}`}
+                        onClick={() => setSelectedQuest({ kind: option.kind, tier: option.tier })}
+                      >
+                        {option.tier === 2 ? <div className="quest-badge">Recommended</div> : null}
+                        <div className="quest-card-top">
+                          <span className="quest-stars">{stars}</span>
+                          <span className="quest-rule-tag">{option.ruleTag}</span>
+                        </div>
+                        <div className="quest-icon">
+                          {option.tier === 1 ? (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                            </svg>
+                          ) : option.tier === 2 ? (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <circle cx="12" cy="12" r="10" />
+                              <circle cx="12" cy="12" r="6" />
+                              <circle cx="12" cy="12" r="2" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
+                              <path d="M5 21h14" />
+                            </svg>
+                          )}
+                        </div>
+                        <h3>{option.title}</h3>
+                        <p>{option.subtitle}. {option.description}</p>
+                        <div className="quest-meta">
+                          <div>
+                            <span>{option.targetLabel}</span>
+                            <strong>{formatCompactVND(option.targetAmount)} VND</strong>
+                          </div>
+                          <div>
+                            <span>Est. Timeline</span>
+                            <strong>{option.etaMonths ? `${option.etaMonths}-${option.etaMonths + 1} months` : questOptions.metadata.canEstimate ? '—' : 'Add income + cap'}</strong>
+                          </div>
+                        </div>
+                        {!questOptions.metadata.canEstimate ? (
+                          <div className="quest-warning">Add income and cap to get accurate estimates.</div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="onboarding-footnote">You can change your quest anytime from the dashboard</div>
               </div>
@@ -586,7 +773,7 @@ export function OnboardingModal() {
               <button className="onboarding-ghost" onClick={() => setStep((step - 1) as Step)}>Back</button>
             ) : null}
           </div>
-          {step === 3 ? (
+          {step === 3 && hasObligationAmount ? (
             <div className="footer-middle">
               Total Obligations: <span className="num">{formatNumberWithCommas(obligationsSum)}</span> VND
             </div>

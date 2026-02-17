@@ -37,6 +37,8 @@ type ZoneItem = {
   zoneId?: string;
 };
 
+type QuestKind = 'debt_cut' | 'earned_climb' | 'recovery_map';
+
 type HeatmapDay = {
   dateISO: string;
   amount: number;
@@ -121,6 +123,12 @@ export default function App() {
   const [questNetIn, setQuestNetIn] = useState(0);
   const [questNetOut, setQuestNetOut] = useState(0);
   const [questNetHistory, setQuestNetHistory] = useState<number[]>([]);
+  const [questKind, setQuestKind] = useState<QuestKind>('earned_climb');
+  const [questName, setQuestName] = useState('Main Quest');
+  const [questBaseline, setQuestBaseline] = useState(0);
+  const [questTier, setQuestTier] = useState<1 | 2 | 3 | undefined>(undefined);
+  const [questShadowDebt, setQuestShadowDebt] = useState(0);
+  const [infoCard, setInfoCard] = useState<'quest' | 'heatmap' | 'cap' | null>(null);
   const [todayISO, setTodayISO] = useState('');
   const [pendingObligationCount, setPendingObligationCount] = useState(0);
   const [moneyInMonth, setMoneyInMonth] = useState(0);
@@ -204,9 +212,30 @@ export default function App() {
          .reduce((sum, tx) => sum + tx.amount, 0);
        const earnedIn = netIn - debtPrincipalIn;
        const earnedNet = earnedIn - netOut;
-       const target = activeQuest?.targetAmount ?? nextSettings?.selfReportedDebt ?? 0;
-       const progressAmount = Math.max(0, Math.min(earnedNet, target));
-       const progress = target > 0 ? Math.min(progressAmount / target, 1) : 0;
+       const obligationsTotal = obligations.reduce((sum, obl) => sum + obl.totalAmount, 0);
+       const questKind = (activeQuest?.kind ?? 'earned_climb') as QuestKind;
+        const questBaseline = activeQuest?.baselineAmount ?? obligationsTotal;
+        const questShadowDebt = activeQuest?.shadowDebt ?? 0;
+        const target = activeQuest?.targetAmount ?? nextSettings?.selfReportedDebt ?? 0;
+        let progressAmount = 0;
+        let progress = 0;
+        if (questKind === 'debt_cut') {
+          const start = questBaseline > 0 ? questBaseline : obligationsTotal;
+          const span = Math.max(1, target);
+          const reduced = Math.max(0, start - obligationsTotal);
+          progressAmount = Math.min(reduced, span);
+          progress = Math.min(progressAmount / span, 1);
+        } else if (questKind === 'recovery_map') {
+          const currentDebt = obligationsTotal + questShadowDebt;
+          const recoveryScore = earnedNet - currentDebt;
+          const span = Math.max(1, target);
+          const shifted = recoveryScore + questBaseline;
+          progressAmount = Math.max(0, Math.min(shifted, span));
+          progress = Math.min(progressAmount / span, 1);
+        } else {
+          progressAmount = Math.max(0, Math.min(earnedNet, target));
+          progress = target > 0 ? Math.min(progressAmount / target, 1) : 0;
+        }
 
       const days: string[] = [];
       for (let i = 29; i >= 0; i -= 1) {
@@ -229,7 +258,8 @@ export default function App() {
        const spendMonth = monthTxs
          .filter((tx) => tx.direction === 'OUT' && tx.categoryId !== 'cat_obligations')
          .reduce((sum, tx) => sum + tx.amount, 0);
-       const obligationsTotal = obligations.reduce((sum, obl) => sum + obl.totalAmount, 0);
+       const questName = activeQuest?.name ?? 'Main Quest';
+       const questTier = activeQuest?.tier;
 
        const heatmapWindow = 90;
        const heatmapMap: Record<string, number> = {};
@@ -288,8 +318,8 @@ export default function App() {
         }
       }
 
-       return { rows, progress, progressAmount, target, net, earnedNet, debtPrincipalIn, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, spendMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly, heatmap };
-     }).subscribe(({ rows, progress, progressAmount, target, net, earnedNet, debtPrincipalIn, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, spendMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly, heatmap }) => {
+       return { rows, progress, progressAmount, target, net, earnedNet, debtPrincipalIn, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, spendMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly, heatmap, questKind, questName, questBaseline, questTier, questShadowDebt };
+     }).subscribe(({ rows, progress, progressAmount, target, net, earnedNet, debtPrincipalIn, netIn, netOut, netHistory, nowISO, pending, inMonth, outMonth, spendMonth, obligationsTotal, allZones, balances, obligations, activities, lastOutValue, lastOutTime, hourly, heatmap, questKind, questName, questBaseline, questTier, questShadowDebt }) => {
       setDueRows(rows);
       setQuestProgress(progress);
       setQuestProgressAmount(progressAmount);
@@ -300,6 +330,11 @@ export default function App() {
       setQuestNetIn(netIn);
       setQuestNetOut(netOut);
       setQuestNetHistory(netHistory);
+      setQuestKind(questKind);
+      setQuestName(questName);
+      setQuestBaseline(questBaseline);
+      setQuestTier(questTier);
+      setQuestShadowDebt(questShadowDebt);
       setTodayISO(nowISO);
       setPendingObligationCount(pending);
       setMoneyInMonth(inMonth);
@@ -455,7 +490,44 @@ export default function App() {
     return `${formatMillions(activity.amount)} VND`;
   }
 
-  const questRemaining = Math.max(0, (questTarget || 0) - questProgressAmount);
+  const questProgressTarget = questKind === 'debt_cut'
+    ? Math.max(1, questTarget)
+    : questTarget || 0;
+  const questRemaining = Math.max(0, questProgressTarget - questProgressAmount);
+  const questProgressLabel = questKind === 'debt_cut'
+    ? 'Debt Reduced'
+    : questKind === 'recovery_map'
+      ? 'Recovery Score'
+      : 'Earned Net';
+  const questTargetLabel = questKind === 'debt_cut'
+    ? 'Target debt cleared'
+    : questKind === 'recovery_map'
+      ? 'Target recovery score'
+      : 'Target earned net';
+  const questTierStars = questTier ? `${'★'.repeat(questTier)}${'☆'.repeat(3 - questTier)}` : '';
+  const questHeroSubtitle = questKind === 'debt_cut'
+    ? 'Every Confirm Paid shrinks your remaining debt.'
+    : questKind === 'recovery_map'
+      ? 'Score rises with earned net and falls with remaining debt.'
+      : 'Earned net ignores borrowed cash so progress stays honest.';
+  const questHeroTargetLine = isFocusMode
+    ? 'Focus Mode hides amounts on passive screens.'
+    : questKind === 'recovery_map'
+      ? ''
+      : `${questTargetLabel}: ${formatVnd(questTarget || 0, { compact: true })} VND`;
+  const questRemainingLabel = questKind === 'debt_cut'
+    ? 'Reduction remaining'
+    : questKind === 'recovery_map'
+      ? 'Score remaining'
+      : 'Remaining to target';
+  const questProgressTargetDisplay = questProgressTarget > 0
+    ? formatVnd(questProgressTarget, { compact: true, isFocus: isFocusMode })
+    : isFocusMode
+      ? '****'
+      : '—';
+  const questProgressAmountDisplay = formatVnd(questProgressAmount, { compact: true, isFocus: isFocusMode });
+  const questBaselineDisplay = formatVnd(questBaseline, { compact: true, isFocus: isFocusMode });
+  const questShadowDebtDisplay = formatVnd(questShadowDebt, { compact: true, isFocus: isFocusMode });
   const maxNetAbs = Math.max(1, ...questNetHistory.map((v) => Math.abs(v)));
   const dailyCap = settings?.monthlyCap ? settings.monthlyCap / 30 : 0;
   const heatmapSlice = heatmapDays.slice(-heatmapRange);
@@ -689,47 +761,62 @@ export default function App() {
           </section>
           <section className="column middle-col no-scrollbar">
             <div className="card hero-card">
-              <div className="hero-content">
-                <div className="hero-label">Main Quest</div>
-                <div className="hero-title num">
-                  {questTarget > 0
-                    ? formatVnd(questTarget, { compact: true, isFocus: isFocusMode })
-                    : isFocusMode
-                      ? '****'
-                      : '100M'} Recovery
+              <div className="hero-card-inner">
+                <div className="hero-content">
+                  <div className="hero-label-row">
+                    <div className="hero-label">Main Quest</div>
+                    <button
+                      className="info-button"
+                      type="button"
+                      onClick={() => setInfoCard('quest')}
+                      title="How quest progress is calculated"
+                      aria-label="Quest info"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="hero-title num">{questName}</div>
+                  <p className="hero-subtitle">
+                    {questHeroSubtitle}
+                    {questTierStars ? ` Difficulty ${questTierStars}.` : ''}
+                  </p>
+                  {questHeroTargetLine ? <div className="hero-meta">{questHeroTargetLine}</div> : null}
+                  <button className="pill hero-button" onClick={() => setShowQuestDetails(true)}>View Details</button>
                 </div>
-                <p className="hero-subtitle">You are steadily climbing from your financial low point. Milestone 2 (75M) is 3M away.</p>
-                <button className="pill hero-button" onClick={() => setShowQuestDetails(true)}>View Details</button>
-              </div>
-              <div className="hero-ring">
-              <div className="progress-ring-container">
-                <svg className="progress-ring" viewBox="0 0 160 160">
-                  <circle
-                    className="progress-ring-bg"
-                    cx="80"
-                    cy="80"
-                    r={ringRadius}
-                    strokeWidth="10"
-                  />
-                  <circle
-                    className="progress-ring-circle"
-                    cx="80"
-                    cy="80"
-                    r={ringRadius}
-                    strokeWidth="10"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={circumference * (1 - questProgress)}
-                  />
-                </svg>
-                  <div className="progress-ring-content">
-                    {isFocusMode ? (
-                      <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{percent}%</span>
-                    ) : (
-                      <>
-                        <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{formatVnd(questProgressAmount, { compact: true })}</span>
-                        <span className="small muted" style={{ fontSize: '16px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '6px' }}>OF {formatVnd(questTarget || 100_000_000, { compact: true })}</span>
-                      </>
-                    )}
+                <div className="hero-ring">
+                  <div className="progress-ring-container">
+                    <svg className="progress-ring" viewBox="0 0 160 160">
+                      <circle
+                        className="progress-ring-bg"
+                        cx="80"
+                        cy="80"
+                        r={ringRadius}
+                        strokeWidth="10"
+                      />
+                      <circle
+                        className="progress-ring-circle"
+                        cx="80"
+                        cy="80"
+                        r={ringRadius}
+                        strokeWidth="10"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={circumference * (1 - questProgress)}
+                      />
+                    </svg>
+                    <div className="progress-ring-content">
+                      {isFocusMode ? (
+                        <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{percent}%</span>
+                      ) : (
+                        <>
+                          <span className="num" style={{ fontSize: '36px', fontWeight: 700, lineHeight: 1 }}>{questProgressAmountDisplay}</span>
+                          <span className="small muted" style={{ fontSize: '16px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '6px' }}>OF {questProgressTargetDisplay}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -738,7 +825,22 @@ export default function App() {
             <div className="card">
               <div className="section-title">
                 <div>
-                  <h2>Discipline Heatmap</h2>
+                  <div className="title-with-info">
+                    <h2>Discipline Heatmap</h2>
+                    <button
+                      className="info-button"
+                      type="button"
+                      onClick={() => setInfoCard('heatmap')}
+                      title="How the heatmap is calculated"
+                      aria-label="Heatmap info"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="16" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                      </svg>
+                    </button>
+                  </div>
                   <div className="small muted">Streak: <span className="num">{streakCount}</span> days</div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -788,7 +890,22 @@ export default function App() {
 
             <div className="card">
               <div className="section-title">
-                <h2>Monthly Cap</h2>
+                <div className="title-with-info">
+                  <h2>Monthly Cap</h2>
+                  <button
+                    className="info-button"
+                    type="button"
+                    onClick={() => setInfoCard('cap')}
+                    title="How monthly cap is calculated"
+                    aria-label="Monthly cap info"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                </div>
                 <span className="small muted" style={{ color: capPercent >= 100 ? '#ef4444' : capPercent >= 80 ? '#f59e0b' : undefined }}>
                   {capPercent}% used
                 </span>
@@ -825,7 +942,7 @@ export default function App() {
                       <div className="zone-label">{zone.name}</div>
                       {zone.transferable ? (
                         <button
-                          className="zone-transfer"
+                          className="action-link"
                           onClick={() => {
                             setTransferFromZoneId(zone.zoneId);
                             setShowTransferModal(true);
@@ -865,10 +982,10 @@ export default function App() {
             </div>
 
             <div className="card">
-              <div className="section-title" style={{ alignItems: 'center' }}>
+              <div className="section-title no-wrap" style={{ alignItems: 'center' }}>
                 <h2>Recent Actions</h2>
                 <button
-                  className="pill"
+                  className="action-link"
                   onClick={() => void undoRecentActivities()}
                   disabled={!recentActivities.length}
                 >
@@ -921,18 +1038,18 @@ export default function App() {
 
       {showQuestDetails ? (
         <Modal title="Quest Details" description="Your progress toward the main quest." onClose={() => setShowQuestDetails(false)}>
-          <div className="card soft" style={{ marginBottom: 12 }}>
-            <div className="small muted">Progress</div>
+            <div className="card soft" style={{ marginBottom: 12 }}>
+            <div className="small muted">{questProgressLabel}</div>
             <div className="num" style={{ fontSize: 22, fontWeight: 700 }}>
-              {formatVnd(questProgressAmount, { compact: true, isFocus: isFocusMode })} out of {formatVnd(questTarget || 100_000_000, { compact: true, isFocus: isFocusMode })}
+              {questProgressAmountDisplay} out of {questProgressTargetDisplay}
             </div>
             <div className="small muted" style={{ marginTop: 4 }}>{percent}% complete</div>
           </div>
-          <div className="card soft" style={{ marginBottom: 12 }}>
-            <div className="small muted">Remaining to target</div>
-            <div className="num" style={{ fontSize: 18, fontWeight: 700 }}>{formatVnd(questRemaining, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
-            <div className="small muted" style={{ marginTop: 6 }}>30-day net trend</div>
-            <div className="quest-sparkline">
+            <div className="card soft" style={{ marginBottom: 12 }}>
+              <div className="small muted">{questRemainingLabel}</div>
+              <div className="num" style={{ fontSize: 18, fontWeight: 700 }}>{formatVnd(questRemaining, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
+              <div className="small muted" style={{ marginTop: 6 }}>30-day net trend</div>
+              <div className="quest-sparkline">
               {questNetHistory.map((value, idx) => {
                 const height = 6 + Math.round((Math.abs(value) / maxNetAbs) * 22);
                 const color = value < 0 ? '#ef4444' : value > 0 ? '#10b981' : '#d1d5db';
@@ -982,6 +1099,62 @@ export default function App() {
               <div className="num">{formatVnd(questNetOut, { compact: true, isFocus: isFocusMode })}{isFocusMode ? '' : ' VND'}</div>
             </div>
           </div>
+        </Modal>
+      ) : null}
+
+      {infoCard ? (
+        <Modal
+          title={infoCard === 'quest' ? 'Main Quest' : infoCard === 'heatmap' ? 'Discipline Heatmap' : 'Monthly Cap'}
+          description={infoCard === 'quest'
+            ? 'A quick, gentle breakdown of what counts.'
+            : infoCard === 'heatmap'
+              ? 'A quick explanation of the heatmap numbers.'
+              : 'A quick explanation of the cap totals.'}
+          onClose={() => setInfoCard(null)}
+        >
+          {infoCard === 'quest' ? (
+            <div className="card soft">
+              <div className="small muted" style={{ marginBottom: 8 }}>Quest type: <span className="num">{questKind.replace('_', ' ')}</span></div>
+              {questKind === 'debt_cut' ? (
+                <>
+                  <div className="small muted">We track how much debt you have cleared.</div>
+                  <div className="small muted" style={{ marginTop: 6 }}>Started at: <span className="num">{questBaselineDisplay}</span></div>
+                  <div className="small muted">Current remaining: <span className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}</span></div>
+                </>
+              ) : questKind === 'recovery_map' ? (
+                <>
+                  <div className="small muted">Recovery score = earned net minus remaining debt.</div>
+                  <div className="small muted" style={{ marginTop: 6 }}>Earned net: <span className="num">{formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode })}</span></div>
+                  <div className="small muted">Remaining debt: <span className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}</span></div>
+                  {questShadowDebt > 0 ? <div className="small muted">Shadow debt: <span className="num">{questShadowDebtDisplay}</span></div> : null}
+                </>
+              ) : (
+                <>
+                  <div className="small muted">Earned net = income minus spending, excluding borrowed cash.</div>
+                  <div className="small muted" style={{ marginTop: 6 }}>Earned net so far: <span className="num">{formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode })}</span></div>
+                  <div className="small muted">Borrowed excluded: <span className="num">{formatVnd(borrowedPrincipal, { compact: true, isFocus: isFocusMode })}</span></div>
+                </>
+              )}
+              <div className="small muted" style={{ marginTop: 10 }}>Transfers never affect quest progress.</div>
+            </div>
+          ) : null}
+
+          {infoCard === 'heatmap' ? (
+            <div className="card soft">
+              <div className="small muted">Each square is one day of spending.</div>
+              <div className="small muted" style={{ marginTop: 6 }}>Daily spend = OUT transactions, excluding obligations and transfers.</div>
+              <div className="small muted" style={{ marginTop: 6 }}>Daily cap = monthly cap ÷ 30.</div>
+            </div>
+          ) : null}
+
+          {infoCard === 'cap' ? (
+            <div className="card soft">
+              <div className="small muted">This shows how much of your monthly cap you have used.</div>
+              <div className="small muted" style={{ marginTop: 6 }}>Cap: <span className="num">{formatVnd(cap, { compact: true, isFocus: isFocusMode })}</span></div>
+              <div className="small muted">Spent this month: <span className="num">{formatVnd(spendOutMonth, { compact: true, isFocus: isFocusMode })}</span></div>
+              <div className="small muted" style={{ marginTop: 6 }}>Obligations and transfers are excluded.</div>
+            </div>
+          ) : null}
         </Modal>
       ) : null}
 
