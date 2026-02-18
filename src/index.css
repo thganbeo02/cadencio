@@ -137,6 +137,15 @@ body {
   box-shadow: none;
 }
 
+.pill:disabled,
+.pill[disabled] {
+  background: #e5e7eb;
+  color: #9ca3af;
+  border-color: #e5e7eb;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .sidebar {
   padding: 24px 12px;
   display: flex;
@@ -445,6 +454,51 @@ body {
   color: var(--primary);
 }
 
+.info-tooltip {
+  position: fixed;
+  z-index: 120;
+  max-width: min(360px, calc(100vw - 16px));
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: 0 18px 40px rgba(71, 64, 128, 0.18);
+  color: var(--text);
+}
+
+.info-tooltip-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.info-tooltip-body {
+  display: grid;
+  gap: 4px;
+}
+
+.info-tooltip.is-top::after,
+.info-tooltip.is-bottom::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+}
+
+.info-tooltip.is-bottom::after {
+  top: -16px;
+  border-bottom-color: #fff;
+  filter: drop-shadow(0 -1px 0 rgba(120, 122, 255, 0.12));
+}
+
+.info-tooltip.is-top::after {
+  bottom: -16px;
+  border-top-color: #fff;
+  filter: drop-shadow(0 1px 0 rgba(120, 122, 255, 0.12));
+}
+
 .hero-ring {
   display: flex;
   align-items: center;
@@ -632,11 +686,33 @@ body {
   gap: 10px;
 }
 
+.zone-card.system {
+  background: #f1f4ff;
+  border-color: #d7dbff;
+}
+
 .zone-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.zone-card-head .zone-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zone-system-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(107, 91, 255, 0.12);
+  color: var(--primary);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .zone-label {
@@ -687,6 +763,62 @@ body {
   justify-content: space-between;
   font-size: 14px;
   color: var(--text-muted);
+}
+
+.zones-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zone-manager-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.zone-manager-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.zone-manager-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.zone-manager-meta {
+  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.zone-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zone-manager-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-weight: 600;
+  background: #fff;
+}
+
+.zone-manager-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .card {

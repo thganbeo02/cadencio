@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { liveQuery } from 'dexie';
 import { seedDatabase } from './db/seed';
 import { db } from './db/database';
@@ -8,6 +8,7 @@ import { OnboardingModal } from './components/OnboardingModal';
 import { ObligationPlanningModal } from './components/ObligationPlanningModal';
 import { TransactionModal } from './components/TransactionModal';
 import { TransferModal } from './components/TransferModal';
+import { ZonesManagerModal } from './components/ZonesManagerModal';
 import { Modal } from './components/Modal';
 import type { Activity, Obligation, ObligationCycle, Zone } from './types';
 import { addDaysISO, dateISOInTimeZone } from './utils/dates';
@@ -35,6 +36,7 @@ type ZoneItem = {
   tone: 'positive' | 'negative' | 'neutral';
   transferable: boolean;
   zoneId?: string;
+  system?: boolean;
 };
 
 type QuestKind = 'debt_cut' | 'earned_climb' | 'recovery_map';
@@ -128,7 +130,13 @@ export default function App() {
   const [questBaseline, setQuestBaseline] = useState(0);
   const [questTier, setQuestTier] = useState<1 | 2 | 3 | undefined>(undefined);
   const [questShadowDebt, setQuestShadowDebt] = useState(0);
-  const [infoCard, setInfoCard] = useState<'quest' | 'heatmap' | 'cap' | null>(null);
+  const [infoTip, setInfoTip] = useState<{ kind: 'quest' | 'heatmap' | 'cap' | 'zones' } | null>(null);
+  const [infoTipPos, setInfoTipPos] = useState<{ top: number; left: number; placement: 'top' | 'bottom' } | null>(null);
+  const questInfoRef = useRef<HTMLButtonElement | null>(null);
+  const heatmapInfoRef = useRef<HTMLButtonElement | null>(null);
+  const capInfoRef = useRef<HTMLButtonElement | null>(null);
+  const zonesInfoRef = useRef<HTMLButtonElement | null>(null);
+  const infoTipRef = useRef<HTMLDivElement | null>(null);
   const [todayISO, setTodayISO] = useState('');
   const [pendingObligationCount, setPendingObligationCount] = useState(0);
   const [moneyInMonth, setMoneyInMonth] = useState(0);
@@ -150,6 +158,7 @@ export default function App() {
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
   const [undoError, setUndoError] = useState<string | null>(null);
   const [showQuestDetails, setShowQuestDetails] = useState(false);
+  const [showZonesManager, setShowZonesManager] = useState(false);
   const [lastOutAmount, setLastOutAmount] = useState(0);
   const [lastOutHours, setLastOutHours] = useState(0);
   const [costPerHour, setCostPerHour] = useState(0);
@@ -262,9 +271,18 @@ export default function App() {
        const questTier = activeQuest?.tier;
 
        const heatmapWindow = 90;
+       const onboardingISO = nextSettings?.onboardingCompletedAt
+         ? dateISOInTimeZone(new Date(nextSettings.onboardingCompletedAt), tz)
+         : '';
+       const windowStart = addDaysISO(nowISO, -(heatmapWindow - 1));
+       const clampedStart = onboardingISO && onboardingISO > windowStart
+         ? onboardingISO
+         : windowStart;
+       const heatmapStart = clampedStart > nowISO ? nowISO : clampedStart;
+       const heatmapSpan = Math.max(0, daysBetweenISO(heatmapStart, nowISO));
        const heatmapMap: Record<string, number> = {};
-       for (let i = heatmapWindow - 1; i >= 0; i -= 1) {
-         const day = addDaysISO(nowISO, -i);
+       for (let i = 0; i <= heatmapSpan; i += 1) {
+         const day = addDaysISO(heatmapStart, i);
          heatmapMap[day] = 0;
        }
         for (const tx of nonTransfer) {
@@ -288,7 +306,7 @@ export default function App() {
       const lastOutValue = lastOutTx?.amount ?? 0;
       const lastOutTime = hourly > 0 ? lastOutValue / hourly : 0;
 
-      const activities = await db.activities.orderBy('createdAt').reverse().limit(5).toArray();
+       const activities = await db.activities.orderBy('createdAt').reverse().limit(5).toArray();
 
       const balances: Record<string, number> = {};
       allZones.forEach((zone) => {
@@ -358,14 +376,19 @@ export default function App() {
   const ringRadius = 54;
   const circumference = 2 * Math.PI * ringRadius;
   const zoneItems = useMemo<ZoneItem[]>(() => {
+    const zoneHqBalance = zoneBalances.zone_hq ?? 0;
+    const hqTone = zoneHqBalance === 0 ? 'neutral' : zoneHqBalance > 0 ? 'positive' : 'negative';
+    const hqSign = zoneHqBalance === 0 ? '' : zoneHqBalance > 0 ? '+' : '-';
+    const moneyInTone = moneyInMonth === 0 ? 'neutral' : 'positive';
+    const moneyInSign = moneyInMonth > 0 ? '+' : '';
     const derived: ZoneItem[] = [
-      { id: 'money_in', name: 'Money In', amount: moneyInMonth, sign: '+', tone: 'positive', transferable: false },
-      { id: 'money_out', name: 'Money Out', amount: moneyOutMonth, sign: '-', tone: 'negative', transferable: false },
-      { id: 'obligations', name: 'Obligations', amount: obligationsRemaining, sign: '-', tone: 'negative', transferable: false },
+      { id: 'money_in', name: 'Money In', amount: moneyInMonth, sign: moneyInSign, tone: moneyInTone, transferable: true, zoneId: 'zone_hq', system: true },
+      { id: 'money_out', name: 'Money Out', amount: moneyOutMonth, sign: '-', tone: 'negative', transferable: false, system: true },
+      { id: 'obligations', name: 'Obligations', amount: obligationsRemaining, sign: '-', tone: 'negative', transferable: false, system: true },
     ];
 
     const assets: ZoneItem[] = zones
-      .filter((zone) => zone.kind === 'asset')
+      .filter((zone) => zone.kind === 'asset' && zone.id !== 'zone_hq')
       .map((zone) => {
         const raw = zoneBalances[zone.id] ?? 0;
         const tone = raw === 0 ? 'neutral' : raw > 0 ? 'positive' : 'negative';
@@ -440,14 +463,14 @@ export default function App() {
     if (!recentActivities.length) return;
     setUndoError(null);
     try {
-      const latest = await db.activities.orderBy('createdAt').reverse().limit(5).toArray();
-      const latestIds = latest.map((a) => a.id).join('|');
-      const currentIds = recentActivities.map((a) => a.id).join('|');
-      if (latestIds !== currentIds) {
+      const latest = await db.activities.orderBy('createdAt').reverse().limit(1).toArray();
+      const latestId = latest[0]?.id;
+      const currentId = recentActivities[0]?.id;
+      if (!latestId || !currentId || latestId !== currentId) {
         setUndoError('Recent actions changed. Refresh to undo latest.');
         return;
       }
-      await undoActivities(recentActivities.map((a) => a.id));
+      await undoActivities([currentId]);
     } catch (e) {
       setUndoError(e instanceof Error ? e.message : 'Failed to undo actions.');
     }
@@ -562,7 +585,66 @@ export default function App() {
     }
   });
   const weeklyPercents = weeklySpends.map((amt) => (weeklyCap > 0 ? Math.min(100, Math.round((amt / weeklyCap) * 100)) : 0));
+  const netMonth = moneyInMonth - moneyOutMonth;
   const netPosition = questNet - obligationsRemaining;
+
+  useLayoutEffect(() => {
+    if (!infoTip) return;
+    const anchor = infoTip.kind === 'quest'
+      ? questInfoRef.current
+      : infoTip.kind === 'heatmap'
+        ? heatmapInfoRef.current
+        : infoTip.kind === 'cap'
+          ? capInfoRef.current
+          : zonesInfoRef.current;
+
+    const update = () => {
+      if (!anchor || !infoTipRef.current) return;
+      const anchorRect = anchor.getBoundingClientRect();
+      const tipRect = infoTipRef.current.getBoundingClientRect();
+      const gap = 10;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const centeredLeft = anchorRect.left + anchorRect.width / 2 - tipRect.width / 2;
+      const clampedLeft = Math.max(8, Math.min(centeredLeft, viewportWidth - tipRect.width - 8));
+      const placeBelow = anchorRect.bottom + gap + tipRect.height <= viewportHeight - 8;
+      const top = placeBelow
+        ? anchorRect.bottom + gap
+        : Math.max(8, anchorRect.top - gap - tipRect.height);
+      setInfoTipPos({ top, left: clampedLeft, placement: placeBelow ? 'bottom' : 'top' });
+    };
+
+    update();
+    const onScroll = () => update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [infoTip?.kind]);
+
+  useEffect(() => {
+    if (!infoTip) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (infoTipRef.current?.contains(target)) return;
+      if (questInfoRef.current?.contains(target)) return;
+      if (heatmapInfoRef.current?.contains(target)) return;
+      if (capInfoRef.current?.contains(target)) return;
+      if (zonesInfoRef.current?.contains(target)) return;
+      setInfoTip(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setInfoTip(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [infoTip]);
 
   if (isLoading) {
     return (
@@ -718,7 +800,12 @@ export default function App() {
               <div className="plan-list">
                 {allObligations.length ? (
                   [...allObligations]
-                    .sort((a, b) => b.totalAmount - a.totalAmount)
+                    .sort((a, b) => {
+                      const aPlanned = a.cycles.length > 0;
+                      const bPlanned = b.cycles.length > 0;
+                      if (aPlanned !== bPlanned) return aPlanned ? 1 : -1;
+                      return b.totalAmount - a.totalAmount;
+                    })
                     .map((obl) => {
                       const isPlanned = obl.cycles.length > 0;
                       return (
@@ -768,7 +855,8 @@ export default function App() {
                     <button
                       className="info-button"
                       type="button"
-                      onClick={() => setInfoCard('quest')}
+                      ref={questInfoRef}
+                      onClick={() => setInfoTip((current) => (current?.kind === 'quest' ? null : { kind: 'quest' }))}
                       title="How quest progress is calculated"
                       aria-label="Quest info"
                     >
@@ -830,7 +918,8 @@ export default function App() {
                     <button
                       className="info-button"
                       type="button"
-                      onClick={() => setInfoCard('heatmap')}
+                      ref={heatmapInfoRef}
+                      onClick={() => setInfoTip((current) => (current?.kind === 'heatmap' ? null : { kind: 'heatmap' }))}
                       title="How the heatmap is calculated"
                       aria-label="Heatmap info"
                     >
@@ -895,7 +984,8 @@ export default function App() {
                   <button
                     className="info-button"
                     type="button"
-                    onClick={() => setInfoCard('cap')}
+                    ref={capInfoRef}
+                    onClick={() => setInfoTip((current) => (current?.kind === 'cap' ? null : { kind: 'cap' }))}
                     title="How monthly cap is calculated"
                     aria-label="Monthly cap info"
                   >
@@ -933,13 +1023,35 @@ export default function App() {
           <section className="column right-col no-scrollbar">
             <div className="card">
               <div className="section-title">
-                <h2>Zones</h2>
+                <div className="title-with-info">
+                  <h2>Zones</h2>
+                  <button
+                    className="info-button"
+                    type="button"
+                    ref={zonesInfoRef}
+                    onClick={() => setInfoTip((current) => (current?.kind === 'zones' ? null : { kind: 'zones' }))}
+                    title="What zones are"
+                    aria-label="Zones info"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="zones-header-actions">
+                  <button className="action-link" onClick={() => setShowZonesManager(true)}>Edit</button>
+                </div>
               </div>
               <div className="zones-stack">
                 {zoneItems.map((zone) => (
-                  <div key={zone.id} className="zone-card">
+                  <div key={zone.id} className={`zone-card ${zone.system ? 'system' : ''}`}>
                     <div className="zone-card-head">
-                      <div className="zone-label">{zone.name}</div>
+                      <div className="zone-label-row">
+                        <div className="zone-label">{zone.name}</div>
+                        {zone.system ? <span className="zone-system-tag">System</span> : null}
+                      </div>
                       {zone.transferable ? (
                         <button
                           className="action-link"
@@ -958,6 +1070,12 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+                {zoneItems.length <= 3 ? (
+                  <div className="small muted" style={{ paddingLeft: 4 }}>
+                    Add zones like Bank, Cash, or Savings to start transferring.{' '}
+                    <button className="action-link" onClick={() => setShowZonesManager(true)}>Add zones</button>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -989,7 +1107,7 @@ export default function App() {
                   onClick={() => void undoRecentActivities()}
                   disabled={!recentActivities.length}
                 >
-                  Undo listed ({recentActivities.length})
+                  Undo latest
                 </button>
               </div>
               <div className="recent-actions">
@@ -1102,60 +1220,79 @@ export default function App() {
         </Modal>
       ) : null}
 
-      {infoCard ? (
-        <Modal
-          title={infoCard === 'quest' ? 'Main Quest' : infoCard === 'heatmap' ? 'Discipline Heatmap' : 'Monthly Cap'}
-          description={infoCard === 'quest'
-            ? 'A quick, gentle breakdown of what counts.'
-            : infoCard === 'heatmap'
-              ? 'A quick explanation of the heatmap numbers.'
-              : 'A quick explanation of the cap totals.'}
-          onClose={() => setInfoCard(null)}
+      {infoTip ? (
+        <div
+          ref={infoTipRef}
+          className={`info-tooltip ${infoTipPos?.placement === 'top' ? 'is-top' : 'is-bottom'}`}
+          role="tooltip"
+          style={infoTipPos ? { top: infoTipPos.top, left: infoTipPos.left } : undefined}
         >
-          {infoCard === 'quest' ? (
-            <div className="card soft">
-              <div className="small muted" style={{ marginBottom: 8 }}>Quest type: <span className="num">{questKind.replace('_', ' ')}</span></div>
-              {questKind === 'debt_cut' ? (
-                <>
-                  <div className="small muted">We track how much debt you have cleared.</div>
-                  <div className="small muted" style={{ marginTop: 6 }}>Started at: <span className="num">{questBaselineDisplay}</span></div>
-                  <div className="small muted">Current remaining: <span className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}</span></div>
-                </>
-              ) : questKind === 'recovery_map' ? (
-                <>
-                  <div className="small muted">Recovery score = earned net minus remaining debt.</div>
-                  <div className="small muted" style={{ marginTop: 6 }}>Earned net: <span className="num">{formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode })}</span></div>
-                  <div className="small muted">Remaining debt: <span className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}</span></div>
-                  {questShadowDebt > 0 ? <div className="small muted">Shadow debt: <span className="num">{questShadowDebtDisplay}</span></div> : null}
-                </>
-              ) : (
-                <>
-                  <div className="small muted">Earned net = income minus spending, excluding borrowed cash.</div>
-                  <div className="small muted" style={{ marginTop: 6 }}>Earned net so far: <span className="num">{formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode })}</span></div>
-                  <div className="small muted">Borrowed excluded: <span className="num">{formatVnd(borrowedPrincipal, { compact: true, isFocus: isFocusMode })}</span></div>
-                </>
-              )}
-              <div className="small muted" style={{ marginTop: 10 }}>Transfers never affect quest progress.</div>
-            </div>
+          {infoTip.kind === 'quest' ? (
+            <>
+              <div className="info-tooltip-title">Main Quest</div>
+              <div className="info-tooltip-body">
+                <div className="small muted" style={{ marginBottom: 8 }}>Quest type: <span className="num">{questKind.replace('_', ' ')}</span></div>
+                {questKind === 'debt_cut' ? (
+                  <>
+                    <div className="small muted">We track how much debt you have cleared.</div>
+                    <div className="small muted" style={{ marginTop: 6 }}>Started at: <span className="num">{questBaselineDisplay}</span></div>
+                    <div className="small muted">Current remaining: <span className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}</span></div>
+                  </>
+                ) : questKind === 'recovery_map' ? (
+                  <>
+                    <div className="small muted">Recovery score = earned net minus remaining debt.</div>
+                    <div className="small muted" style={{ marginTop: 6 }}>Earned net: <span className="num">{formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode })}</span></div>
+                    <div className="small muted">Remaining debt: <span className="num">{formatVnd(obligationsRemaining, { compact: true, isFocus: isFocusMode })}</span></div>
+                    {questShadowDebt > 0 ? <div className="small muted">Shadow debt: <span className="num">{questShadowDebtDisplay}</span></div> : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="small muted">Earned net = income minus spending, excluding borrowed cash.</div>
+                    <div className="small muted" style={{ marginTop: 6 }}>Earned net so far: <span className="num">{formatVnd(questEarnedNet, { compact: true, isFocus: isFocusMode })}</span></div>
+                    <div className="small muted">Borrowed excluded: <span className="num">{formatVnd(borrowedPrincipal, { compact: true, isFocus: isFocusMode })}</span></div>
+                  </>
+                )}
+                <div className="small muted" style={{ marginTop: 10 }}>Transfers never affect quest progress.</div>
+              </div>
+            </>
           ) : null}
 
-          {infoCard === 'heatmap' ? (
-            <div className="card soft">
-              <div className="small muted">Each square is one day of spending.</div>
-              <div className="small muted" style={{ marginTop: 6 }}>Daily spend = OUT transactions, excluding obligations and transfers.</div>
-              <div className="small muted" style={{ marginTop: 6 }}>Daily cap = monthly cap ÷ 30.</div>
-            </div>
+          {infoTip.kind === 'heatmap' ? (
+            <>
+              <div className="info-tooltip-title">Discipline Heatmap</div>
+              <div className="info-tooltip-body">
+                <div className="small muted">Each square is one day of spending.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Daily spend = OUT transactions, excluding obligations and transfers.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Daily cap = monthly cap ÷ 30.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>When you’re new, the range starts on your onboarding day instead of showing empty history.</div>
+              </div>
+            </>
           ) : null}
 
-          {infoCard === 'cap' ? (
-            <div className="card soft">
-              <div className="small muted">This shows how much of your monthly cap you have used.</div>
-              <div className="small muted" style={{ marginTop: 6 }}>Cap: <span className="num">{formatVnd(cap, { compact: true, isFocus: isFocusMode })}</span></div>
-              <div className="small muted">Spent this month: <span className="num">{formatVnd(spendOutMonth, { compact: true, isFocus: isFocusMode })}</span></div>
-              <div className="small muted" style={{ marginTop: 6 }}>Obligations and transfers are excluded.</div>
-            </div>
+          {infoTip.kind === 'cap' ? (
+            <>
+              <div className="info-tooltip-title">Monthly Cap</div>
+              <div className="info-tooltip-body">
+                <div className="small muted">This shows how much of your monthly cap you have used.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Cap: <span className="num">{formatVnd(cap, { compact: true, isFocus: isFocusMode })}</span></div>
+                <div className="small muted">Spent this month: <span className="num">{formatVnd(spendOutMonth, { compact: true, isFocus: isFocusMode })}</span></div>
+                <div className="small muted" style={{ marginTop: 6 }}>Obligations and transfers are excluded.</div>
+              </div>
+            </>
           ) : null}
-        </Modal>
+
+          {infoTip.kind === 'zones' ? (
+            <>
+              <div className="info-tooltip-title">Zones</div>
+              <div className="info-tooltip-body">
+                <div className="small muted">Zones are buckets you move money between.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Money In, Money Out, and Obligations are system defaults.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Add zones like Bank, Cash, or Savings to track where your money sits.</div>
+                <div className="small muted" style={{ marginTop: 6 }}>Transfers never affect your quest, heatmap, or cap.</div>
+              </div>
+            </>
+          ) : null}
+        </div>
       ) : null}
 
       {showAddObligationModal ? (
@@ -1233,7 +1370,16 @@ export default function App() {
         <TransferModal
           onClose={() => setShowTransferModal(false)}
           zones={zones}
+          zoneBalances={zoneBalances}
           fromZoneId={transferFromZoneId}
+        />
+      ) : null}
+
+      {showZonesManager ? (
+        <ZonesManagerModal
+          zones={zones}
+          zoneBalances={zoneBalances}
+          onClose={() => setShowZonesManager(false)}
         />
       ) : null}
 

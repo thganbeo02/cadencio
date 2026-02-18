@@ -14,9 +14,7 @@ const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 const DEFAULT_ZONES: Zone[] = [
-  { id: 'zone_hq', name: 'HQ (Salary In)', kind: 'asset', createdAt: Date.now() },
-  { id: 'zone_bank_savings', name: 'Bank Savings', kind: 'asset', createdAt: Date.now() },
-  { id: 'zone_hidden_cash', name: 'Hidden Cash', kind: 'asset', createdAt: Date.now() },
+  { id: 'zone_hq', name: 'Money In', kind: 'asset', createdAt: Date.now() },
 ];
 
 const DEFAULT_SETTINGS: Settings = {
@@ -51,6 +49,10 @@ export async function seedDatabase(): Promise<void> {
 
   if (zoneCount === 0) {
     await db.zones.bulkAdd(DEFAULT_ZONES);
+  }
+  const hq = await db.zones.get('zone_hq');
+  if (hq && hq.name !== 'Money In') {
+    await db.zones.update('zone_hq', { name: 'Money In' });
   }
 
   if (!settingsRecord) {

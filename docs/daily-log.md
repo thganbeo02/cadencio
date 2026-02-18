@@ -1,5 +1,31 @@
 # Cadencio - Daily Development Log
 
+## 2026-02-18 - Wednesday
+
+### Session 1 (Time TBD)
+
+**Goal**: Rework Zones defaults, transfers, and clarity UI.
+
+**Completed**:
+- ✅ Replaced info modals with click/tap tooltips (quest/heatmap/cap/zones).
+- ✅ Reworked Zones defaults to system rows (Money In/Out/Obligations) and added Manage Zones modal.
+- ✅ Transfer modal now shows available funds, blocks over-transfer, and disables invalid confirm.
+- ✅ Recent Actions undo is now one-by-one (Undo latest).
+- ✅ Plan your obligations list now shows unplanned items first.
+- ✅ Heatmap start clamps to onboarding day.
+
+**Blockers**: None
+
+**Next Steps**:
+- Decide whether to surface net balance elsewhere since Money In is now IN-only.
+- Consider a subtle “Started” marker for the first heatmap day.
+
+**Stats**: Files: 6 | +? -? | Deps: none
+
+**Notes**: Transfer availability uses zone balances (including transfers), not month-IN totals.
+
+---
+
 ## 2026-02-17 - Tuesday
 
 **Goal**: Rework Main Quest selection into creative quest types + tiered difficulty, and tighten dashboard clarity.

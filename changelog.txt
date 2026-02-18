@@ -1,5 +1,68 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-17 18:05
+Last Updated: 2026-02-18 19:45
+
+===============================================================================
+2026-02-18 - Zones Guardrails & Tooltip UX
+===============================================================================
+
+FEATURE: Info Tooltips
+--------
+What Changed (Human):
+  - Info icons now open compact tooltips instead of full modals
+  - Tooltips close on outside click or Escape
+
+What Changed (Technical):
+  - Added anchored tooltip state and positioning for quest/heatmap/cap/zones
+  - Added tooltip styling
+
+Files: src/App.tsx, src/index.css
+
+---
+
+FEATURE: Zones Defaults + Manager
+--------
+What Changed (Human):
+  - Zones start with Money In/Out/Obligations and explain how zones work
+  - Edit lets you add, rename, or remove custom zones
+
+What Changed (Technical):
+  - Seed now creates only zone_hq and renames it to Money In
+  - Added ZonesManagerModal with add/rename/delete constraints
+  - Zones list uses system row styling and new header actions
+
+Files: src/db/seed.ts, src/App.tsx, src/components/ZonesManagerModal.tsx, src/index.css
+
+---
+
+FEATURE: Transfer Guardrails
+--------
+What Changed (Human):
+  - Transfer shows how much is available in the selected zone
+  - Over-limit transfers show a warning and disable Confirm
+
+What Changed (Technical):
+  - TransferModal now consumes zoneBalances and validates against available funds
+  - Disabled button styling added for pill buttons
+
+Files: src/components/TransferModal.tsx, src/App.tsx, src/index.css
+
+---
+
+FEATURE: Heatmap + Actions Tuning
+--------
+What Changed (Human):
+  - Heatmap ranges start on onboarding day to avoid empty history
+  - Recent Actions undo now rolls back only the latest action
+  - Planning list shows unplanned obligations first
+
+What Changed (Technical):
+  - Clamped heatmap window start to onboardingCompletedAt
+  - Adjusted undo to operate on single latest activity id
+  - Updated obligation list sorting to prioritize unplanned
+
+Files: src/App.tsx
+
+---
 
 ================================================================================
 2026-02-17 - Quest Modes & Quest Clarity

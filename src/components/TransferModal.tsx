@@ -16,13 +16,16 @@ function formatNumberWithCommas(value: number): string {
 export function TransferModal({
   onClose,
   zones,
+  zoneBalances,
   fromZoneId,
 }: {
   onClose: () => void;
   zones: Zone[];
+  zoneBalances: Record<string, number>;
   fromZoneId?: string;
 }) {
   const assetZones = useMemo(() => zones.filter((zone) => zone.kind === 'asset'), [zones]);
+  const hasEnoughZones = assetZones.length >= 2;
   const [amountRaw, setAmountRaw] = useState('');
   const [note, setNote] = useState('');
   const [fromId, setFromId] = useState(fromZoneId ?? assetZones[0]?.id ?? '');
@@ -39,14 +42,25 @@ export function TransferModal({
   }, [amountRaw]);
 
   const displayAmount = amountRaw ? formatNumberWithCommas(Number(amountRaw)) : '';
+  const rawAvailable = zoneBalances[fromId] ?? 0;
+  const available = Math.max(0, Math.round(rawAvailable));
+  const overBy = amount > available ? amount - available : 0;
 
   async function submit() {
+    if (!hasEnoughZones) {
+      setError('Add at least two zones to make a transfer.');
+      return;
+    }
     if (!fromId || !toId || fromId === toId) {
       setError('Choose two different zones.');
       return;
     }
     if (!amount || amount <= 0) {
       setError('Enter a valid amount.');
+      return;
+    }
+    if (amount > available) {
+      setError('Not enough funds in this zone.');
       return;
     }
 
@@ -72,6 +86,12 @@ export function TransferModal({
       descriptionClassName="onboarding-subtitle"
     >
       <div className="transaction-body">
+        {!hasEnoughZones ? (
+          <div className="card soft">
+            <div className="small muted">Add at least two zones before transferring.</div>
+            <div className="small muted" style={{ marginTop: 6 }}>Use the Zones card → Edit to add more zones.</div>
+          </div>
+        ) : null}
         <div className="transaction-amount">
           <span className="amount-prefix">VND</span>
           <input
@@ -81,8 +101,16 @@ export function TransferModal({
             value={displayAmount}
             autoFocus
             onChange={(e) => setAmountRaw(digitsOnly(e.target.value))}
+            disabled={!hasEnoughZones}
           />
         </div>
+        {hasEnoughZones ? (
+          <div>
+            <div className="small muted" style={{ fontSize: 20 }}>
+              You have <span className="num">{formatNumberWithCommas(available)}</span> VND to transfer.
+            </div>
+          </div>
+        ) : null}
 
         <div className="transfer-grid">
           <div className="transfer-field">
@@ -92,6 +120,7 @@ export function TransferModal({
               className="transaction-select"
               value={fromId}
               onChange={(e) => setFromId(e.target.value)}
+              disabled={!hasEnoughZones}
             >
               {assetZones.map((zone) => (
                 <option key={zone.id} value={zone.id}>{zone.name}</option>
@@ -105,6 +134,7 @@ export function TransferModal({
               className="transaction-select"
               value={toId}
               onChange={(e) => setToId(e.target.value)}
+              disabled={!hasEnoughZones}
             >
               {assetZones.map((zone) => (
                 <option key={zone.id} value={zone.id}>{zone.name}</option>
@@ -121,15 +151,22 @@ export function TransferModal({
             placeholder="Optional note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
+            disabled={!hasEnoughZones}
           />
         </div>
+
+        {hasEnoughZones && overBy > 0 ? (
+          <div className="small" style={{ color: '#ef4444', fontSize: 20 }}>
+            Not enough funds. Enter a smaller amount!
+          </div>
+        ) : null}
 
         {error ? <div className="transaction-error">{error}</div> : null}
       </div>
 
       <div className="transaction-actions">
         <button className="pill" onClick={onClose} disabled={isSaving}>Cancel</button>
-        <button className="pill primary" onClick={() => void submit()} disabled={isSaving}>
+        <button className="pill primary" onClick={() => void submit()} disabled={isSaving || !hasEnoughZones || overBy > 0 || amount <= 0}>
           {isSaving ? 'Saving...' : 'Confirm'}
         </button>
       </div>
