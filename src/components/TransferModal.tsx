@@ -2,16 +2,8 @@ import { useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { createTransfer } from '../services/transactions';
 import type { Zone } from '../types';
-
-function digitsOnly(raw: string): string {
-  return raw.replace(/[^\d]/g, '');
-}
-
-function formatNumberWithCommas(value: number): string {
-  const n = Math.round(value);
-  if (!Number.isFinite(n)) return '0';
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
+import { digitsOnly } from '../utils/input';
+import { formatNumberWithCommas } from '../utils/money';
 
 export function TransferModal({
   onClose,

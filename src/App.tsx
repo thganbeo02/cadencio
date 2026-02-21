@@ -10,8 +10,12 @@ import { TransactionModal } from './components/TransactionModal';
 import { TransferModal } from './components/TransferModal';
 import { ZonesManagerModal } from './components/ZonesManagerModal';
 import { Modal } from './components/Modal';
+import { ObligationsPage } from './components/ObligationsPage';
 import type { Activity, Obligation, ObligationCycle, Zone } from './types';
 import { addDaysISO, dateISOInTimeZone } from './utils/dates';
+import { digitsOnly } from './utils/input';
+import { formatCompactVND, formatMillions, formatNumberWithCommas } from './utils/money';
+import { getCategoryName } from './constants/categories';
 import { confirmObligationPaid, createObligation } from './services/obligations';
 import { undoActivities } from './services/activities';
 
@@ -45,29 +49,6 @@ type HeatmapDay = {
   dateISO: string;
   amount: number;
 };
-
-function digitsOnly(raw: string): string {
-  return raw.replace(/[^\d]/g, '');
-}
-
-function formatCompactVND(amount: number): string {
-  if (amount >= 1_000_000_000) return (amount / 1_000_000_000).toFixed(1) + 'B';
-  if (amount >= 1_000_000) return (amount / 1_000_000).toFixed(0) + 'M';
-  if (amount >= 1_000) return (amount / 1_000).toFixed(0) + 'K';
-  return String(Math.round(amount));
-}
-
-function formatNumberWithCommas(value: number): string {
-  const n = Math.round(value);
-  if (!Number.isFinite(n)) return '0';
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function formatMillions(amount: number): string {
-  const n = amount / 1_000_000;
-  if (!Number.isFinite(n)) return '0.0M';
-  return `${n.toFixed(1)}M`;
-}
 
 function formatVnd(amount: number, options?: { compact?: boolean; isFocus?: boolean; showSign?: boolean }): string {
   if (options?.isFocus) return '****';
@@ -170,6 +151,7 @@ export default function App() {
   const [newObligationAmountRaw, setNewObligationAmountRaw] = useState('');
   const [newObligationPriority, setNewObligationPriority] = useState<1 | 2 | 3>(2);
   const [newObligationError, setNewObligationError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'dashboard' | 'obligations'>('dashboard');
 
   async function resetApp() {
     if (window.confirm("Reset all data and restart onboarding?")) {
@@ -482,19 +464,9 @@ export default function App() {
 
   function activityTitle(activity: Activity): string {
     if (activity.type === 'transaction_added') {
-      const id = activity.meta?.categoryId ?? '';
-      if (id === 'cat_food') return 'Food';
-      if (id === 'cat_transport') return 'Transport';
-      if (id === 'cat_utilities') return 'Utilities';
-      if (id === 'cat_fun') return 'Fun';
-      if (id === 'cat_growth') return 'Growth';
-      if (id === 'cat_salary') return 'Salary';
-      if (id === 'cat_freelance') return 'Freelance';
-      if (id === 'cat_gift') return 'Gift';
-      if (id === 'cat_refund') return 'Refund';
-      if (id === 'cat_debt') return 'Borrowed';
-      if (id === 'cat_obligations') return 'Obligations';
-      return activity.title;
+      const id = activity.meta?.categoryId;
+      const name = id ? getCategoryName(id) : undefined;
+      return name ?? activity.title;
     }
     return activity.title;
   }
@@ -502,6 +474,7 @@ export default function App() {
   function activityBadge(activity: Activity): string {
     if (activity.type === 'obligation_planned') return 'PLAN';
     if (activity.type === 'confirmed_paid') return 'PAID';
+    if (activity.type === 'obligation_borrowed') return 'DEBT';
     if (activity.type === 'transfer_created') return 'MOVE';
     if (activity.type === 'transaction_added') return activity.direction === 'IN' ? 'IN' : 'OUT';
     return 'ACT';
@@ -688,13 +661,21 @@ export default function App() {
       </header>
 
       <aside className="sidebar">
-        <div className="nav-item active" aria-label="Home">
+        <button
+          className={`nav-item ${activeView === 'dashboard' ? 'active' : ''}`}
+          aria-label="Home"
+          onClick={() => setActiveView('dashboard')}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M3 10.5L12 3l9 7.5" />
             <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
           </svg>
-        </div>
-        <div className="nav-item" aria-label="Obligations">
+        </button>
+        <button
+          className={`nav-item ${activeView === 'obligations' ? 'active' : ''}`}
+          aria-label="Obligations"
+          onClick={() => setActiveView('obligations')}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 6h8" />
             <path d="M9 12h8" />
@@ -703,7 +684,7 @@ export default function App() {
             <path d="M5 12h.01" />
             <path d="M5 18h.01" />
           </svg>
-        </div>
+        </button>
         <button
           className="nav-item"
           aria-label="Add"
@@ -747,7 +728,8 @@ export default function App() {
       </aside>
 
       <main className="content">
-        <div className="dashboard-grid">
+        {activeView === 'dashboard' ? (
+          <div className="dashboard-grid">
           <section className="column left-col no-scrollbar">
             <div className="card stack-card">
               <div className="section-title">
@@ -1133,7 +1115,13 @@ export default function App() {
               {undoError ? <div className="small" style={{ color: '#ef4444', marginTop: 8 }}>{undoError}</div> : null}
             </div>
           </section>
-        </div>
+          </div>
+        ) : (
+          <ObligationsPage
+            isFocusMode={isFocusMode}
+            timezone={settings?.timezone ?? 'UTC'}
+          />
+        )}
       </main>
 
       {confirm ? (

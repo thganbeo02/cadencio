@@ -2,31 +2,17 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { Modal } from './Modal';
 import { createTransaction } from '../services/transactions';
-import type { TransactionDirection } from '../types';
+import type { Category } from '../types';
+import { CATEGORY_BY_ID, RECEIVE_CATEGORY_ORDER, SPEND_CATEGORY_ORDER } from '../constants/categories';
+import { digitsOnly } from '../utils/input';
+import { formatNumberWithCommas } from '../utils/money';
 
 type Tab = 'spend' | 'receive';
 
 type CategoryOption = {
   id: string;
   name: string;
-  direction: TransactionDirection;
 };
-
-const SPEND_CATEGORIES: CategoryOption[] = [
-  { id: 'cat_food', name: 'Food', direction: 'OUT' },
-  { id: 'cat_transport', name: 'Transport', direction: 'OUT' },
-  { id: 'cat_utilities', name: 'Utilities', direction: 'OUT' },
-  { id: 'cat_fun', name: 'Fun', direction: 'OUT' },
-  { id: 'cat_growth', name: 'Growth', direction: 'OUT' },
-];
-
-const RECEIVE_CATEGORIES: CategoryOption[] = [
-  { id: 'cat_salary', name: 'Salary', direction: 'IN' },
-  { id: 'cat_freelance', name: 'Freelance', direction: 'IN' },
-  { id: 'cat_gift', name: 'Gift', direction: 'IN' },
-  { id: 'cat_refund', name: 'Refund', direction: 'IN' },
-  { id: 'cat_debt', name: 'Borrowed', direction: 'IN' },
-];
 
 const CATEGORY_ICONS: Record<string, ReactNode> = {
   cat_food: (
@@ -64,10 +50,11 @@ const CATEGORY_ICONS: Record<string, ReactNode> = {
       <path d="M8 15s1.5 2 4 2 4-2 4-2" />
     </svg>
   ),
-  cat_growth: (
+  cat_other: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 19V5" />
-      <path d="m5 12 7-7 7 7" />
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M9 9h6" />
+      <path d="M9 13h6" />
     </svg>
   ),
   cat_salary: (
@@ -101,6 +88,13 @@ const CATEGORY_ICONS: Record<string, ReactNode> = {
       <path d="M21 21v-6h-6" />
     </svg>
   ),
+  cat_other_in: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M9 9h6" />
+      <path d="M9 13h6" />
+    </svg>
+  ),
   cat_debt: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M6 2h8l4 4v16H6z" />
@@ -118,16 +112,6 @@ const CATEGORY_ICONS: Record<string, ReactNode> = {
     </svg>
   ),
 };
-
-function digitsOnly(raw: string): string {
-  return raw.replace(/[^\d]/g, '');
-}
-
-function formatNumberWithCommas(value: number): string {
-  const n = Math.round(value);
-  if (!Number.isFinite(n)) return '0';
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
 
 export function TransactionModal({
   onClose,
@@ -150,7 +134,13 @@ export function TransactionModal({
 
   const displayAmount = amountRaw ? formatNumberWithCommas(Number(amountRaw)) : '';
 
-  const categories = tab === 'spend' ? SPEND_CATEGORIES : RECEIVE_CATEGORIES;
+  const categories = useMemo<CategoryOption[]>(() => {
+    const order = tab === 'spend' ? SPEND_CATEGORY_ORDER : RECEIVE_CATEGORY_ORDER;
+    return order
+      .map((id) => CATEGORY_BY_ID[id])
+      .filter((category): category is Category => Boolean(category))
+      .map((category) => ({ id: category.id, name: category.name }));
+  }, [tab]);
 
   const activeCategoryId = categoryId ?? categories[0]?.id ?? null;
   const activeDirection: TransactionDirection = tab === 'receive' ? 'IN' : 'OUT';
@@ -232,6 +222,12 @@ export function TransactionModal({
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
+          <div
+            className="transaction-label"
+            style={{ marginTop: 6, color: '#ef4444', textTransform: 'none', letterSpacing: '0', fontSize: 16 }}
+          >
+            Borrowed money? Toss it into Obligations so your quest log keeps the story straight!
+          </div>
         </div>
 
         {error ? <div className="transaction-error">{error}</div> : null}

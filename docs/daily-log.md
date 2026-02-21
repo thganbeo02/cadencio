@@ -1,5 +1,28 @@
 # Cadencio - Daily Development Log
 
+## 2026-02-20 - Friday
+
+### Session 1 (Time TBD)
+
+**Goal**: Build an Obligations hub and fix category integrity.
+
+**Completed**:
+- ✅ Built a dedicated Obligations screen with tabs, master-detail panel, and confirm paid actions.
+- ✅ Added Borrowed logging inside Obligations only, including principal IN and undo support.
+- ✅ Centralized categories and updated seed/UI/activity labels to stay in sync.
+- ✅ Unified money/input formatting utilities across modals.
+- ✅ Tuned obligations layout, typography, and date formatting (month/day).
+
+**Blockers**: None
+
+**Next Steps**:
+- Review obligations layout spacing and nudge styling on mobile.
+- Decide if the detail panel should collapse into a drawer below 1100px.
+
+**Stats**: Files: 16 | +? -? | Deps: none
+
+**Notes**: Borrowed cash now lives strictly in Obligations for cleaner debt integrity.
+
 ## 2026-02-18 - Wednesday
 
 ### Session 1 (Time TBD)

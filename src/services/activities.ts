@@ -60,6 +60,15 @@ export async function undoActivities(activityIds: string[]): Promise<void> {
           });
         }
       }
+
+      if (undo.kind === 'obligation_borrowed') {
+        if (undo.txId) await db.transactions.delete(undo.txId);
+        if (undo.createdObligation) {
+          await db.obligations.delete(undo.obligationId);
+        } else {
+          await db.obligations.update(undo.obligationId, { totalAmount: undo.prevTotalAmount });
+        }
+      }
     }
 
     await db.activities.bulkDelete(activityIds);

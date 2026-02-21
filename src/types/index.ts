@@ -86,13 +86,14 @@ export interface SettingsRecord extends Settings {
   id: 'settings';
 }
 
-export type ActivityType = 'transaction_added' | 'transfer_created' | 'obligation_planned' | 'confirmed_paid';
+export type ActivityType = 'transaction_added' | 'transfer_created' | 'obligation_planned' | 'confirmed_paid' | 'obligation_borrowed';
 
 export type ActivityUndo =
   | { kind: 'transaction'; txId: string }
   | { kind: 'transfer'; txIds: string[] }
   | { kind: 'obligation_planned'; obligationId: string; prevCycles: ObligationCycle[]; prevTotalAmount: number }
-  | { kind: 'confirmed_paid'; obligationId: string; cycleId: string; prevCycle: ObligationCycle; prevTotalAmount: number; txId: string };
+  | { kind: 'confirmed_paid'; obligationId: string; cycleId: string; prevCycle: ObligationCycle; prevTotalAmount: number; txId: string }
+  | { kind: 'obligation_borrowed'; obligationId: string; prevTotalAmount: number; txId?: string; createdObligation?: boolean };
 
 export interface Activity {
   id: string;

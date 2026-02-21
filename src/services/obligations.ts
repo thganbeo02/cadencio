@@ -11,6 +11,14 @@ export interface CreateObligationInput {
   priority: ObligationPriority;
 }
 
+export interface BorrowObligationInput {
+  obligationId?: string;
+  name?: string;
+  priority?: ObligationPriority;
+  amount: number;
+  note?: string;
+}
+
 export async function createObligation(input: CreateObligationInput): Promise<Obligation> {
   const name = input.name.trim();
   if (!name) throw new Error('Name is required');
@@ -26,6 +34,69 @@ export async function createObligation(input: CreateObligationInput): Promise<Ob
   };
   await db.obligations.add(obl);
   return obl;
+}
+
+export async function recordObligationBorrow(input: BorrowObligationInput): Promise<void> {
+  const amount = Math.round(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be > 0');
+
+  await db.transaction('rw', db.obligations, db.transactions, db.activities, db.settings, async () => {
+    let obligationId = input.obligationId;
+    let obligationName = '';
+    let priority: ObligationPriority = input.priority ?? 2;
+    let prevTotalAmount = 0;
+    let createdObligation = false;
+
+    if (obligationId) {
+      const existing = await db.obligations.get(obligationId);
+      if (!existing) throw new Error('Obligation not found');
+      obligationName = existing.name;
+      priority = existing.priority;
+      prevTotalAmount = existing.totalAmount;
+      await db.obligations.update(existing.id, { totalAmount: existing.totalAmount + amount });
+    } else {
+      const name = input.name?.trim() ?? '';
+      if (!name) throw new Error('Name is required');
+      const obl: Obligation = {
+        id: makeId('obl'),
+        name,
+        totalAmount: amount,
+        priority,
+        cycles: [],
+      };
+      await db.obligations.add(obl);
+      obligationId = obl.id;
+      obligationName = obl.name;
+      createdObligation = true;
+    }
+
+    const note = input.note?.trim() ? input.note.trim() : obligationName;
+    const tx = await createTransaction({
+      amount,
+      direction: 'IN',
+      categoryId: 'cat_debt',
+      note,
+      tags: ['debt_principal'],
+      suppressActivity: true,
+    });
+
+    await addActivity({
+      type: 'obligation_borrowed',
+      title: 'Debt increased',
+      amount,
+      direction: 'IN',
+      meta: {
+        obligationName,
+      },
+      undo: {
+        kind: 'obligation_borrowed',
+        obligationId,
+        prevTotalAmount,
+        txId: tx.id,
+        createdObligation,
+      },
+    });
+  });
 }
 
 export type ObligationPlan =

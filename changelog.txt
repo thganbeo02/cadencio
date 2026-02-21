@@ -1,5 +1,54 @@
 CADENCIO - CHANGELOG
-Last Updated: 2026-02-18 19:45
+Last Updated: 2026-02-20 16:45
+
+================================================================================
+2026-02-20 - Obligations Hub + Category Integrity
+================================================================================
+
+FEATURE: Obligations Hub (Debt Book)
+--------
+What Changed (Human):
+  - Obligations now live on their own screen with tabs, a detail panel, and clear status badges
+  - Borrowed cash is logged from Obligations only, with a dedicated modal and gentle planning nudges
+  - Due dates now display as month/day for faster scanning
+
+What Changed (Technical):
+  - Added ObligationsPage with master-detail layout, tabs, and confirm paid actions
+  - Added borrowing flow that updates obligations, logs principal IN, and supports undo
+  - Added new activity type for debt increases and updated badge styling
+  - Added date formatting helper for obligations UI
+
+Files: src/components/ObligationsPage.tsx, src/services/obligations.ts, src/services/activities.ts,
+       src/types/index.ts, src/App.tsx, src/index.css
+
+---
+
+FEATURE: Category Source of Truth
+--------
+What Changed (Human):
+  - Categories stay consistent across adds, labels, and activity titles
+  - Borrowed no longer appears as a Receive category (it lives in Obligations)
+
+What Changed (Technical):
+  - Centralized categories in constants and reused them in seed + Transaction modal
+  - Updated activity title lookup to use canonical category names
+
+Files: src/constants/categories.ts, src/db/seed.ts, src/components/TransactionModal.tsx, src/App.tsx
+
+---
+
+FEATURE: Money/Input Utilities
+--------
+What Changed (Human):
+  - Amount formatting and input behavior are now consistent across modals
+
+What Changed (Technical):
+  - Added shared input and money helpers; removed duplicate formatting logic
+
+Files: src/utils/input.ts, src/utils/money.ts, src/components/OnboardingModal.tsx,
+       src/components/TransferModal.tsx, src/components/ObligationPlanningModal.tsx,
+       src/components/ZonesManagerModal.tsx, src/components/NextActionsCard.tsx,
+       src/components/TransactionModal.tsx, src/App.tsx
 
 ===============================================================================
 2026-02-18 - Zones Guardrails & Tooltip UX

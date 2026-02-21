@@ -7,17 +7,8 @@ import { Modal } from './Modal';
 import { scheduleObligation, type ObligationPlan } from '../services/obligations';
 import { suggestObligationPlan } from '../services/obligationSuggestion';
 import { dateISOInTimeZone } from '../utils/dates';
-
-function digitsOnly(raw: string): string {
-  return raw.replace(/[^\d]/g, '');
-}
-
-function formatNumberWithCommas(value: number | string, allowZero = false): string {
-  const s = typeof value === 'number' ? Math.round(value).toString() : digitsOnly(value);
-  if (s === '0' && !allowZero) return '';
-  if (!s) return '';
-  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
+import { digitsOnly } from '../utils/input';
+import { formatNumberWithCommas, formatVndInput } from '../utils/money';
 
 function clampDay(d: number): number {
   return Math.min(28, Math.max(1, Math.round(d)));
@@ -48,7 +39,7 @@ function CurrencyInput({
           inputMode="numeric"
           className="onboarding-input-field num has-prefix"
           placeholder={placeholder}
-          value={formatNumberWithCommas(value)}
+          value={formatVndInput(value)}
           onChange={(e) => onChange(digitsOnly(e.target.value))}
         />
       </div>
@@ -261,7 +252,7 @@ export function ObligationPlanningModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="summary-right">
             <div className="summary-label">REMAINING BALANCE</div>
-            <div className="summary-name num">{formatNumberWithCommas(current.totalAmount, true)} <span style={{ fontSize: 12, opacity: 0.5 }}>VND</span></div>
+            <div className="summary-name num">{formatNumberWithCommas(current.totalAmount)} <span style={{ fontSize: 12, opacity: 0.5 }}>VND</span></div>
           </div>
         </div>
 

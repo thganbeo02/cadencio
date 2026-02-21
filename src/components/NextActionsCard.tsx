@@ -6,6 +6,7 @@ import { confirmObligationPaid, refreshMissedObligationCycles } from '../service
 import { dateISOInTimeZone, addDaysISO } from '../utils/dates';
 import { Modal } from './Modal';
 import { ObligationPlanningModal } from './ObligationPlanningModal';
+import { digitsOnly } from '../utils/input';
 
 type Row = {
   obligation: Obligation;
@@ -26,10 +27,6 @@ export function NextActionsCard() {
   const [confirm, setConfirm] = useState<{ obligationId: string; cycleId: string; name: string; plannedAmount: number } | null>(null);
   const [paidAmountRaw, setPaidAmountRaw] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-
-  function digitsOnly(raw: string): string {
-    return raw.replace(/[^\d]/g, '');
-  }
 
   useEffect(() => {
     refreshMissedObligationCycles();

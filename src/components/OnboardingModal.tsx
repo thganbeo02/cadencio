@@ -3,6 +3,8 @@ import { db } from '../db/database';
 import { useAppStore } from '../stores/useAppStore';
 import type { ObligationPriority } from '../types';
 import { makeId } from '../utils/id';
+import { digitsOnly } from '../utils/input';
+import { formatCompactVND, formatNumberWithCommas } from '../utils/money';
 
 function clampDay(d: number): number {
   return Math.min(30, Math.max(0, d));
@@ -12,23 +14,6 @@ function safeInt(raw: string, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.round(n);
-}
-
-function formatCompactVND(amount: number): string {
-  if (amount >= 1_000_000_000) return (amount / 1_000_000_000).toFixed(1) + 'B';
-  if (amount >= 1_000_000) return (amount / 1_000_000).toFixed(0) + 'M';
-  if (amount >= 1_000) return (amount / 1_000).toFixed(0) + 'K';
-  return String(Math.round(amount));
-}
-
-function formatNumberWithCommas(value: number): string {
-  const n = Math.round(value);
-  if (!Number.isFinite(n)) return '0';
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function digitsOnly(raw: string): string {
-  return raw.replace(/[^\d]/g, '');
 }
 
 type Step = 1 | 2 | 3 | 4 | 5;

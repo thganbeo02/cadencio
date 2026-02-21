@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import type { Zone } from '../types';
 import { makeId } from '../utils/id';
 import { Modal } from './Modal';
+import { formatNumberWithCommas } from '../utils/money';
 
 type ZonesManagerModalProps = {
   zones: Zone[];
@@ -11,12 +12,6 @@ type ZonesManagerModalProps = {
 };
 
 const SYSTEM_ZONE_IDS = new Set(['zone_hq']);
-
-function formatNumberWithCommas(value: number): string {
-  const n = Math.round(value);
-  if (!Number.isFinite(n)) return '0';
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
 
 export function ZonesManagerModal({ zones, zoneBalances, onClose }: ZonesManagerModalProps) {
   const [newZoneName, setNewZoneName] = useState('');
